@@ -14,7 +14,7 @@
 
 package ocifilter
 
-import "github.com/jcarter3/oci"
+import "github.com/docker/oci"
 
 // ReadOnly returns a registry implementation that returns
 // an "operation unsupported" error from all entry points that

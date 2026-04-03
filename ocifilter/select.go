@@ -19,7 +19,7 @@ import (
 	"io"
 	"iter"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 )
 
 // AccessKind represents the type of access being performed on a registry.

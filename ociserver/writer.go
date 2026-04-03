@@ -22,11 +22,11 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
-	"github.com/jcarter3/oci/internal/ocirequest"
+	"github.com/docker/oci/internal/ocirequest"
 )
 
 func (r *registry) handleBlobUploadBlob(ctx context.Context, resp http.ResponseWriter, req *http.Request, rreq *ocirequest.Request) error {

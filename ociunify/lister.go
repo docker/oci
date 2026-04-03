@@ -21,7 +21,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 )
 
 func (u unifier) Repositories(ctx context.Context, startAfter string) iter.Seq2[string, error] {

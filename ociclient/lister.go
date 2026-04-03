@@ -25,10 +25,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
-	"github.com/jcarter3/oci/internal/ocirequest"
+	"github.com/docker/oci/internal/ocirequest"
 )
 
 func (c *client) Repositories(ctx context.Context, startAfter string) iter.Seq2[string, error] {

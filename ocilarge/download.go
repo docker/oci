@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 	"github.com/opencontainers/go-digest"
 )
 

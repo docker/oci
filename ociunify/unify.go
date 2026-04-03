@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 )
 
 // Options holds configuration for the unified registry.

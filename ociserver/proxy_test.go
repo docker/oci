@@ -22,15 +22,15 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jcarter3/oci/ociclient"
-	"github.com/jcarter3/oci/ocimem"
-	"github.com/jcarter3/oci/ociserver"
+	"github.com/docker/oci/ociclient"
+	"github.com/docker/oci/ocimem"
+	"github.com/docker/oci/ociserver"
 )
 
 // Test that implementing an OCI registry proxy by sitting ociserver

@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 )
 
 // Reader methods.

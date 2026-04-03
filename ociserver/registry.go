@@ -26,8 +26,8 @@ import (
 	"net/http"
 	"sync/atomic"
 
-	"github.com/jcarter3/oci"
-	"github.com/jcarter3/oci/internal/ocirequest"
+	"github.com/docker/oci"
+	"github.com/docker/oci/internal/ocirequest"
 	ocispecroot "github.com/opencontainers/image-spec/specs-go"
 )
 

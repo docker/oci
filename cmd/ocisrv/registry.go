@@ -20,12 +20,12 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jcarter3/oci"
-	"github.com/jcarter3/oci/ociclient"
-	"github.com/jcarter3/oci/ocidebug"
-	"github.com/jcarter3/oci/ocifilter"
-	"github.com/jcarter3/oci/ocimem"
-	"github.com/jcarter3/oci/ociunify"
+	"github.com/docker/oci"
+	"github.com/docker/oci/ociclient"
+	"github.com/docker/oci/ocidebug"
+	"github.com/docker/oci/ocifilter"
+	"github.com/docker/oci/ocimem"
+	"github.com/docker/oci/ociunify"
 )
 
 var kindToRegistryType = make(map[string]reflect.Type)

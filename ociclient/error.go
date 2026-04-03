@@ -22,7 +22,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 )
 
 // errorBodySizeLimit holds the maximum number of response bytes aallowed in

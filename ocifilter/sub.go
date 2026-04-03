@@ -21,8 +21,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/jcarter3/oci"
-	"github.com/jcarter3/oci/ociauth"
+	"github.com/docker/oci"
+	"github.com/docker/oci/ociauth"
 )
 
 // Sub returns r wrapped so that it addresses only

@@ -1,4 +1,4 @@
-module github.com/jcarter3/oci
+module github.com/docker/oci
 
 go 1.25.0
 

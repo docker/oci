@@ -17,7 +17,7 @@ package ociserver
 import (
 	"fmt"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 )
 
 func withHTTPCode(statusCode int, err error) error {

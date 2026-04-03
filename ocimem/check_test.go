@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jcarter3/oci"
-	"github.com/jcarter3/oci/ocitest"
+	"github.com/docker/oci"
+	"github.com/docker/oci/ocitest"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"

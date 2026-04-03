@@ -27,7 +27,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jcarter3/oci/ociclient"
+	"github.com/docker/oci/ociclient"
 	"github.com/rogpeppe/go-internal/testscript"
 	"github.com/rogpeppe/retry"
 )

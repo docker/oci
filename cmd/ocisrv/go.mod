@@ -1,17 +1,17 @@
-module github.com/jcarter3/oci/cmd/ocisrv
+module github.com/docker/oci/cmd/ocisrv
 
 go 1.25.0
 
 require (
 	github.com/cue-exp/cueconfig v0.0.1
 	github.com/go-json-experiment/json v0.0.0-20240524174822-2d9f40f7385b
-	github.com/jcarter3/oci v0.0.0
+	github.com/docker/oci v0.0.0
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/rogpeppe/go-internal v1.14.1
 	github.com/rogpeppe/retry v0.1.0
 )
 
-replace github.com/jcarter3/oci => ../../../oci
+replace github.com/docker/oci => ../../../oci
 
 require (
 	cuelang.org/go v0.6.0-alpha.2.0.20230628162133-7be6224cbc4f // indirect

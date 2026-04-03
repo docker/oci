@@ -4,7 +4,7 @@ This repository holds functionality related to OCI (Open Container Initiative).
 
 The top-level package (`oci`) defines a [Go interface](./interface.go) that encapsulates the operations provided by an OCI registry — reading blobs and manifests, pushing content, listing tags, and more.
 
-Full reference documentation can be found at [pkg.go.dev/github.com/jcarter3/oci](https://pkg.go.dev/github.com/jcarter3/oci).
+Full reference documentation can be found at [pkg.go.dev/github.com/docker/oci](https://pkg.go.dev/github.com/docker/oci).
 
 The aim is to provide an ergonomic interface for defining and layering OCI registry implementations.
 
@@ -48,8 +48,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jcarter3/oci/ociauth"
-	"github.com/jcarter3/oci/ociclient"
+	"github.com/docker/oci/ociauth"
+	"github.com/docker/oci/ociclient"
 )
 
 func main() {
@@ -87,8 +87,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/jcarter3/oci/ociauth"
-	"github.com/jcarter3/oci/ociclient"
+	"github.com/docker/oci/ociauth"
+	"github.com/docker/oci/ociclient"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
@@ -138,8 +138,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/jcarter3/oci/ociauth"
-	"github.com/jcarter3/oci/ociclient"
+	"github.com/docker/oci/ociauth"
+	"github.com/docker/oci/ociclient"
 )
 
 func main() {
@@ -187,8 +187,8 @@ package main
 import (
 	"net/http"
 
-	"github.com/jcarter3/oci/ocimem"
-	"github.com/jcarter3/oci/ociserver"
+	"github.com/docker/oci/ocimem"
+	"github.com/docker/oci/ociserver"
 )
 
 func main() {

@@ -18,8 +18,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/jcarter3/oci"
-	"github.com/jcarter3/oci/internal/ocirequest"
+	"github.com/docker/oci"
+	"github.com/docker/oci/internal/ocirequest"
 )
 
 func (r *registry) handleBlobDelete(ctx context.Context, resp http.ResponseWriter, req *http.Request, rreq *ocirequest.Request) error {

@@ -30,13 +30,13 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
-	"github.com/jcarter3/oci/internal/ocirequest"
-	"github.com/jcarter3/oci/ociauth"
-	"github.com/jcarter3/oci/ociref"
+	"github.com/docker/oci/internal/ocirequest"
+	"github.com/docker/oci/ociauth"
+	"github.com/docker/oci/ociref"
 )
 
 // debug enables logging.
@@ -59,7 +59,7 @@ type Options struct {
 	// address the host instead of https.
 	Insecure bool
 
-	// Specifies a user agent string to use when making requests. Defaults to "jcarter3/oci"
+	// Specifies a user agent string to use when making requests. Defaults to "docker/oci"
 	UserAgent string
 }
 
@@ -86,7 +86,7 @@ func New(host string, opts0 *Options) (oci.Interface, error) {
 		opts.Transport = http.DefaultTransport
 	}
 	if opts.UserAgent == "" {
-		opts.UserAgent = "jcarter3/oci"
+		opts.UserAgent = "docker/oci"
 	}
 	// Check that it's a valid host by forming a URL from it and checking that it matches.
 	u, err := url.Parse("https://" + host + "/path")

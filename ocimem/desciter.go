@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"iter"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 

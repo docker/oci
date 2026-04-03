@@ -25,11 +25,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 	"github.com/opencontainers/go-digest"
 
-	"github.com/jcarter3/oci/internal/ocirequest"
-	"github.com/jcarter3/oci/ociauth"
+	"github.com/docker/oci/internal/ocirequest"
+	"github.com/docker/oci/ociauth"
 )
 
 // This file implements the oci.Writer methods.

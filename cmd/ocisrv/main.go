@@ -24,9 +24,9 @@ import (
 	"reflect"
 
 	"github.com/cue-exp/cueconfig"
+	"github.com/docker/oci/ociserver"
 	"github.com/go-json-experiment/json"
 	"github.com/go-json-experiment/json/jsontext"
-	"github.com/jcarter3/oci/ociserver"
 )
 
 var (

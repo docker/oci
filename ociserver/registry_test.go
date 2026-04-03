@@ -22,8 +22,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jcarter3/oci/ocimem"
-	"github.com/jcarter3/oci/ociserver"
+	"github.com/docker/oci/ocimem"
+	"github.com/docker/oci/ociserver"
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 )

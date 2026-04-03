@@ -24,7 +24,7 @@ import (
 	"log"
 	"sync/atomic"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 )
 
 // New returns a new [oci.Interface] that wraps r and logs all operations

@@ -3,7 +3,7 @@ package ociclient
 import (
 	"testing"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 	"github.com/stretchr/testify/require"
 )
 

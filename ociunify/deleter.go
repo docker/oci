@@ -17,7 +17,7 @@ package ociunify
 import (
 	"context"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 )
 
 // Deleter methods

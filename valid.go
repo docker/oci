@@ -1,7 +1,7 @@
 package oci
 
 import (
-	"github.com/jcarter3/oci/ociref"
+	"github.com/docker/oci/ociref"
 )
 
 // IsValidRepoName reports whether the given repository

@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 )
 
 func (u unifier) PushBlob(ctx context.Context, repo string, desc oci.Descriptor, r io.Reader) (oci.Descriptor, error) {

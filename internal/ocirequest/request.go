@@ -23,8 +23,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/jcarter3/oci"
-	"github.com/jcarter3/oci/ociref"
+	"github.com/docker/oci"
+	"github.com/docker/oci/ociref"
 )
 
 var (

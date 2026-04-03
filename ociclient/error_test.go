@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jcarter3/oci"
-	"github.com/jcarter3/oci/ociserver"
+	"github.com/docker/oci"
+	"github.com/docker/oci/ociserver"
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

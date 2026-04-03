@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	oci "github.com/jcarter3/oci"
+	oci "github.com/docker/oci"
 )
 
 // TODO decide on a good value for this.

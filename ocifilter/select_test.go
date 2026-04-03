@@ -20,12 +20,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jcarter3/oci"
+	"github.com/docker/oci"
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/jcarter3/oci/ocimem"
+	"github.com/docker/oci/ocimem"
 )
 
 func TestAccessCheckerErrorReturn(t *testing.T) {
