@@ -37,6 +37,14 @@ const (
 	// maxRetries is the number of times a single chunk download is
 	// retried before the whole operation is failed.
 	maxRetries = 3
+
+	// fetchTimeout is the per-attempt deadline for a single chunk download.
+	// If the server stalls mid-transfer for longer than this, the attempt is
+	// abandoned and retried. Expressed as a multiple of targetChunkDuration
+	// so it stays proportional if the target is tuned: 15× gives enough
+	// headroom for bandwidth to drop well below the probed value without
+	// triggering false timeouts, while still catching genuine stalls promptly.
+	fetchTimeout = 15 * targetChunkDuration
 )
 
 // DownloadLargeBlob downloads a blob using multiple concurrent HTTP range
@@ -121,15 +129,20 @@ func timedRangeGet(ctx context.Context, reg oci.Interface, repo string, dgst oci
 func fetchRange(ctx context.Context, reg oci.Interface, repo string, dgst oci.Digest, start, end int64) ([]byte, error) {
 	size := end - start
 	var lastErr error
-	for attempt := range maxRetries {
-		_ = attempt
-		br, err := reg.GetBlobRange(ctx, repo, dgst, start, end)
+	for range maxRetries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		attemptCtx, attemptCancel := context.WithTimeout(ctx, fetchTimeout)
+		br, err := reg.GetBlobRange(attemptCtx, repo, dgst, start, end)
 		if err != nil {
+			attemptCancel()
 			lastErr = err
 			continue
 		}
 		data, err := io.ReadAll(io.LimitReader(br, size))
 		closeErr := br.Close()
+		attemptCancel()
 		if err != nil {
 			lastErr = err
 			continue
@@ -170,6 +183,8 @@ func runPipeline(
 	probeData []byte,
 	pw *io.PipeWriter,
 ) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	defer pw.Close()
 
 	// Probe data may cover more than one "chunk" if chunkSize < probeSize,
@@ -178,6 +193,7 @@ func runPipeline(
 
 	// Write probe data first.
 	if _, err := pw.Write(probeData); err != nil {
+		cancel()
 		pw.CloseWithError(err)
 		return
 	}
@@ -243,6 +259,7 @@ func runPipeline(
 		var cr chunkResult
 		select {
 		case <-ctx.Done():
+			cancel()
 			pw.CloseWithError(ctx.Err())
 			wg.Wait()
 			return
@@ -253,6 +270,7 @@ func runPipeline(
 		slots[i%maxConcurrent] = nil
 
 		if cr.err != nil {
+			cancel()
 			pw.CloseWithError(fmt.Errorf("chunk %d (offset %d): %w", i, chunks[i].start, cr.err))
 			wg.Wait()
 			return
@@ -260,6 +278,7 @@ func runPipeline(
 
 		// Write the data into the pipe, then let it be GC'd.
 		if _, err := pw.Write(cr.data); err != nil {
+			cancel()
 			pw.CloseWithError(err)
 			wg.Wait()
 			return
