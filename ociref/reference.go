@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/docker/oci/internal/ocidocker"
 	"github.com/opencontainers/go-digest"
 )
 
@@ -195,13 +196,19 @@ func ParseRelative(refStr string) (Reference, error) {
 			return Reference{}, fmt.Errorf("invalid digest %q: %v", ref.Digest, err)
 		}
 	}
+	if _, ok := ocidocker.DockerHubHosts[ref.Host]; ok {
+		ref.Host = "docker.io"
+	}
+	if ref.Host == "docker.io" && !strings.Contains(ref.Repository, "/") {
+		ref.Repository = "library/" + ref.Repository
+	}
+	if len(ref.Repository) > 255 {
+		return Reference{}, fmt.Errorf("repository name too long")
+	}
 	if len(ref.Tag) > 0 {
 		if err := checkTag(ref.Tag); err != nil {
 			return Reference{}, err
 		}
-	}
-	if len(ref.Repository) > 255 {
-		return Reference{}, fmt.Errorf("repository name too long")
 	}
 	return ref, nil
 }
