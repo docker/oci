@@ -293,7 +293,7 @@ func (r *registry) setAuthorizationFromChallenge(ctx context.Context, req *http.
 // the outer context is cancelled, but we'll ignore that. We probably shouldn't.
 func (r *registry) init() error {
 	inner := func() error {
-		info, err := r.config.EntryForRegistry(r.host)
+		info, err := dockerWrapper{r.config}.EntryForRegistry(r.host)
 		if err != nil {
 			return fmt.Errorf("cannot acquire auth info for registry %q: %v", r.host, err)
 		}

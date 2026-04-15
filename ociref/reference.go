@@ -196,7 +196,8 @@ func ParseRelative(refStr string) (Reference, error) {
 			return Reference{}, fmt.Errorf("invalid digest %q: %v", ref.Digest, err)
 		}
 	}
-	if _, ok := ocidocker.DockerHubHosts[ref.Host]; ok {
+	// Normalize Docker Hub registry hosts, also default to Docker if none is provided
+	if _, ok := ocidocker.DockerHubHosts[ref.Host]; ok || ref.Host == "" {
 		ref.Host = "docker.io"
 	}
 	if ref.Host == "docker.io" && !strings.Contains(ref.Repository, "/") {
