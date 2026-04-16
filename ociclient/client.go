@@ -88,6 +88,9 @@ func New(host string, opts0 *Options) (oci.Interface, error) {
 	if opts.UserAgent == "" {
 		opts.UserAgent = "docker/oci"
 	}
+	if host == "docker.io" {
+		host = "registry-1.docker.io"
+	}
 	// Check that it's a valid host by forming a URL from it and checking that it matches.
 	u, err := url.Parse("https://" + host + "/path")
 	if err != nil {
