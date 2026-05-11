@@ -535,6 +535,78 @@ func TestNewWithIndex_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestImageIndex_DefensiveCopies(t *testing.T) {
+	ctx := context.Background()
+	reg := ocimem.New()
+	pushImage(t, ctx, reg, "test/img", "v1", [][]tarFile{
+		{{Name: "a.txt", Type: tar.TypeReg, Body: "unchanged"}},
+	})
+
+	f, err := New(ctx, reg, "test/img", "v1")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer f.Close()
+
+	idx := f.ImageIndex()
+	idx.Layers[0].TarIndex[0].Header.Size = 1
+	idx.Layers[0].GzipIndex.Size = 1
+	if len(idx.Layers[0].GzipIndex.Checkpoints) > 0 {
+		idx.Layers[0].GzipIndex.Checkpoints[0].Out = 12345
+	}
+
+	got, err := f.ReadFile("a.txt")
+	if err != nil {
+		t.Fatalf("ReadFile after mutating ImageIndex result: %v", err)
+	}
+	if string(got) != "unchanged" {
+		t.Fatalf("a.txt after mutating ImageIndex result = %q, want unchanged", got)
+	}
+
+	fresh := f.ImageIndex()
+	if fresh.Layers[0].TarIndex[0].Header.Size != int64(len("unchanged")) {
+		t.Fatalf("fresh ImageIndex tar size = %d, want %d", fresh.Layers[0].TarIndex[0].Header.Size, len("unchanged"))
+	}
+	if fresh.Layers[0].GzipIndex.Size == 1 {
+		t.Fatalf("fresh ImageIndex reused mutated gzip index")
+	}
+}
+
+func TestNewWithIndex_DefensivelyCopiesInput(t *testing.T) {
+	ctx := context.Background()
+	reg := ocimem.New()
+	pushImage(t, ctx, reg, "test/img", "v1", [][]tarFile{
+		{{Name: "a.txt", Type: tar.TypeReg, Body: "from-index"}},
+	})
+
+	f, err := New(ctx, reg, "test/img", "v1")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	idx := f.ImageIndex()
+	f.Close()
+
+	f2, err := NewWithIndex(ctx, reg, "test/img", "v1", idx)
+	if err != nil {
+		t.Fatalf("NewWithIndex: %v", err)
+	}
+	defer f2.Close()
+
+	idx.Layers[0].TarIndex[0].Header.Size = 1
+	idx.Layers[0].GzipIndex.Size = 1
+	if len(idx.Layers[0].GzipIndex.Checkpoints) > 0 {
+		idx.Layers[0].GzipIndex.Checkpoints[0].In = 12345
+	}
+
+	got, err := f2.ReadFile("a.txt")
+	if err != nil {
+		t.Fatalf("ReadFile after mutating NewWithIndex input: %v", err)
+	}
+	if string(got) != "from-index" {
+		t.Fatalf("a.txt after mutating NewWithIndex input = %q, want from-index", got)
+	}
+}
+
 func TestNewWithIndex_Stale(t *testing.T) {
 	ctx := context.Background()
 	reg := ocimem.New()

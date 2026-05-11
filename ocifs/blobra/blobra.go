@@ -9,6 +9,7 @@ package blobra
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/docker/oci"
@@ -66,6 +67,9 @@ func (r *Reader) Size() int64 {
 func (r *Reader) ReadAt(p []byte, off int64) (int, error) {
 	if len(p) == 0 {
 		return 0, nil
+	}
+	if off < 0 {
+		return 0, fmt.Errorf("blobra: negative offset %d", off)
 	}
 	if off >= r.desc.Size {
 		return 0, io.EOF

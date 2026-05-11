@@ -68,25 +68,19 @@ func (f *FS) ConfigBlob() []byte { return f.config }
 
 // ImageIndex returns a snapshot of the per-layer indices that can be
 // persisted via [ImageIndex.Encode] and reused with [NewWithIndex].
-// The returned struct is freshly allocated, but the GzipIndex and ZstdIndex
-// pointers inside it point to the same objects held by the FS — callers
-// must not mutate them.
+// The returned struct is a deep copy; callers may mutate it without
+// affecting the FS.
 func (f *FS) ImageIndex() *ImageIndex {
 	out := &ImageIndex{Layers: make([]LayerIndex, len(f.layers))}
 	for i, l := range f.layers {
-		li := LayerIndex{
+		out.Layers[i] = cloneLayerIndex(LayerIndex{
 			Digest:    l.desc.Digest,
 			MediaType: l.desc.MediaType,
 			Size:      l.desc.Size,
+			GzipIndex: l.gzipIndex,
+			ZstdIndex: l.zstdIndex,
 			TarIndex:  l.tarIndex,
-		}
-		if l.gzipIndex != nil {
-			li.GzipIndex = l.gzipIndex
-		}
-		if l.zstdIndex != nil {
-			li.ZstdIndex = l.zstdIndex
-		}
-		out.Layers[i] = li
+		})
 	}
 	return out
 }
@@ -142,6 +136,7 @@ func NewWithIndex(ctx context.Context, reg oci.Interface, name string, ref strin
 	if idx == nil {
 		return nil, errors.New("ocifs: NewWithIndex: idx is nil")
 	}
+	idx = idx.Clone()
 	manifestBytes, manifestMT, err := fetchManifest(ctx, reg, name, ref)
 	if err != nil {
 		return nil, err

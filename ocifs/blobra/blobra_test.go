@@ -80,6 +80,17 @@ func TestReadAtAgainstOCIMem(t *testing.T) {
 	}
 }
 
+func TestReadAtNegativeOffset(t *testing.T) {
+	data := []byte("abcd")
+	fr := newFake(data)
+	r := blobra.New(context.Background(), fr, testRepo, fr.desc)
+
+	n, err := r.ReadAt(make([]byte, 1), -1)
+	assert.Equal(t, 0, n)
+	assert.ErrorContains(t, err, "negative offset")
+	assert.Equal(t, 0, fr.calls, "negative offsets should not issue range requests")
+}
+
 // fakeRanger is a minimal BlobRanger used to exercise paths that ocimem
 // cannot produce, such as a truncated or empty range response.
 type fakeRanger struct {

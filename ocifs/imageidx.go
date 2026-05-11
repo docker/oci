@@ -38,6 +38,19 @@ type ImageIndex struct {
 	Layers []LayerIndex `json:"layers"`
 }
 
+// Clone returns a deep copy of idx. Mutating the result does not affect idx
+// or any FS that produced idx via ImageIndex.
+func (idx *ImageIndex) Clone() *ImageIndex {
+	if idx == nil {
+		return nil
+	}
+	out := &ImageIndex{Layers: make([]LayerIndex, len(idx.Layers))}
+	for i := range idx.Layers {
+		out.Layers[i] = cloneLayerIndex(idx.Layers[i])
+	}
+	return out
+}
+
 // Encode writes the JSON encoding of idx to w.
 func (idx *ImageIndex) Encode(w io.Writer) error {
 	return json.NewEncoder(w).Encode(idx)
@@ -50,4 +63,59 @@ func DecodeImageIndex(r io.Reader) (*ImageIndex, error) {
 		return nil, err
 	}
 	return &idx, nil
+}
+
+func cloneLayerIndex(in LayerIndex) LayerIndex {
+	out := LayerIndex{
+		Digest:    in.Digest,
+		MediaType: in.MediaType,
+		Size:      in.Size,
+		GzipIndex: cloneGzipIndex(in.GzipIndex),
+		ZstdIndex: cloneZstdIndex(in.ZstdIndex),
+	}
+	if in.TarIndex != nil {
+		out.TarIndex = make([]tarfs.Entry, len(in.TarIndex))
+		copy(out.TarIndex, in.TarIndex)
+	}
+	return out
+}
+
+func cloneGzipIndex(in *gzipr.Index) *gzipr.Index {
+	if in == nil {
+		return nil
+	}
+	out := &gzipr.Index{
+		Size:        in.Size,
+		Checkpoints: make([]*gzipr.Checkpoint, len(in.Checkpoints)),
+	}
+	for i, cp := range in.Checkpoints {
+		if cp == nil {
+			continue
+		}
+		cpCopy := *cp
+		if cp.Hist != nil {
+			cpCopy.Hist = make([]byte, len(cp.Hist))
+			copy(cpCopy.Hist, cp.Hist)
+		}
+		out.Checkpoints[i] = &cpCopy
+	}
+	return out
+}
+
+func cloneZstdIndex(in *zstdr.Index) *zstdr.Index {
+	if in == nil {
+		return nil
+	}
+	out := &zstdr.Index{
+		Size:   in.Size,
+		Frames: make([]*zstdr.FrameCheckpoint, len(in.Frames)),
+	}
+	for i, fr := range in.Frames {
+		if fr == nil {
+			continue
+		}
+		frCopy := *fr
+		out.Frames[i] = &frCopy
+	}
+	return out
 }

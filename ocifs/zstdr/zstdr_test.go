@@ -536,20 +536,21 @@ func TestReadAtClosedDuringWait(t *testing.T) {
 		doneG2 <- res{n: n, err: err}
 	}()
 
-	// Close should unblock goroutine 2 with ErrClosed and let
-	// goroutine 1's in-flight call drain.
-	close(hold.gate)
-	require.NoError(t, r2.Close())
+	// Close should unblock goroutine 2 with ErrClosed while it waits
+	// for goroutine 1's in-flight call to drain. Run Close in the
+	// background: calling it synchronously before releasing hold.gate
+	// would deadlock by construction.
+	closeDone := make(chan error, 1)
+	go func() {
+		closeDone <- r2.Close()
+	}()
 
 	got := <-doneG2
-	// Goroutine 2 either won the slot before close (succeeds) or
-	// got ErrClosed; both are acceptable. The assertion that
-	// matters is that it did not deadlock.
-	if got.err != nil {
-		assert.True(t,
-			errors.Is(got.err, zstdr.ErrClosed) || got.err == nil,
-			"unexpected error: %v", got.err)
-	}
+	assert.Equal(t, 0, got.n)
+	assert.ErrorIs(t, got.err, zstdr.ErrClosed)
+
+	close(hold.gate)
+	require.NoError(t, <-closeDone)
 	<-doneG1
 }
 
