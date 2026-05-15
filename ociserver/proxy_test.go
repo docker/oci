@@ -23,8 +23,7 @@ import (
 	"testing"
 
 	"github.com/docker/oci"
-	"github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/docker/oci/ocidigest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -64,9 +63,9 @@ var proxyTests = []struct {
 	{
 		name: "PushBlob_small",
 		clientDo: func(ctx context.Context, client oci.Interface) error {
-			_, err := client.PushBlob(ctx, "foo/bar", ocispec.Descriptor{
+			_, err := client.PushBlob(ctx, "foo/bar", oci.Descriptor{
 				Size:   int64(len(smallData)),
-				Digest: digest.FromBytes(smallData),
+				Digest: ocidigest.FromBytes(smallData),
 			}, bytes.NewReader(smallData))
 			return err
 		},
@@ -82,9 +81,9 @@ var proxyTests = []struct {
 	{
 		name: "PushBlob_large",
 		clientDo: func(ctx context.Context, client oci.Interface) error {
-			_, err := client.PushBlob(ctx, "foo/bar", ocispec.Descriptor{
+			_, err := client.PushBlob(ctx, "foo/bar", oci.Descriptor{
 				Size:   int64(len(largeData)),
-				Digest: digest.FromBytes(largeData),
+				Digest: ocidigest.FromBytes(largeData),
 			}, bytes.NewReader(largeData))
 			return err
 		},
@@ -107,7 +106,7 @@ var proxyTests = []struct {
 			if _, err := bw.Write(largeData); err != nil {
 				return err
 			}
-			if _, err := bw.Commit(digest.FromBytes(largeData)); err != nil {
+			if _, err := bw.Commit(ocidigest.FromBytes(largeData)); err != nil {
 				return err
 			}
 			return nil

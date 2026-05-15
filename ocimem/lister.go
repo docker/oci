@@ -86,5 +86,5 @@ func mapKeysIter[K comparable, V any](m map[K]V, cmp func(K, K) int, startAfter 
 }
 
 func compareDescriptor(d0, d1 oci.Descriptor) int {
-	return strings.Compare(string(d0.Digest), string(d1.Digest))
+	return strings.Compare(d0.Digest.String(), d1.Digest.String())
 }

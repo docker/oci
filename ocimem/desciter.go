@@ -7,7 +7,6 @@ import (
 	"iter"
 
 	"github.com/docker/oci"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 type refKind int
@@ -37,24 +36,30 @@ type manifestInfo struct {
 
 type descIter = iter.Seq[descInfo]
 
-// TODO support other manifest types.
-var manifestInfoByMediaType = map[string]func(data []byte) (manifestInfo, error){
-	ocispec.MediaTypeImageManifest: manifestInfoForType(imageInfo),
-	ocispec.MediaTypeImageIndex:    manifestInfoForType(indexInfo),
-}
-
 // getManifestInfo returns information on the manifest
 // described by the given media type and data.
 func getManifestInfo(mediaType string, data []byte) (manifestInfo, error) {
-	getInfo := manifestInfoByMediaType[mediaType]
-	if getInfo == nil {
+	switch mediaType {
+	case oci.MediaTypeImageManifest, oci.MediaTypeDockerManifest,
+		oci.MediaTypeImageIndex, oci.MediaTypeDockerManifestList:
+	default:
 		// TODO provide a configuration option to disallow unknown manifest types.
 		//return nil, fmt.Errorf("media type %q: %w", mediaType, errUnknownManifestMediaTypeForIteration)
 		return manifestInfo{
 			descriptors: func(func(descInfo) bool) {},
 		}, nil
 	}
-	return getInfo(data)
+	var m oci.IndexOrManifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		return manifestInfo{}, fmt.Errorf("cannot unmarshal into %T: %v", &m, err)
+	}
+	if m.MediaType == "" {
+		m.MediaType = mediaType
+	}
+	if err := m.Validate(); err != nil {
+		return manifestInfo{}, err
+	}
+	return indexOrManifestInfo(m), nil
 }
 
 // repoTagIter returns an iterator that iterates through
@@ -73,19 +78,18 @@ func repoTagIter(r *repository) descIter {
 	}
 }
 
-func manifestInfoForType[T any](getInfo func(T) manifestInfo) func(data []byte) (manifestInfo, error) {
-	return func(data []byte) (manifestInfo, error) {
-		var x T
-		if err := json.Unmarshal(data, &x); err != nil {
-			return manifestInfo{}, fmt.Errorf("cannot unmarshal into %T: %v", &x, err)
-		}
-		return getInfo(x), nil
-	}
-}
-
-func imageInfo(m oci.Manifest) manifestInfo {
+func indexOrManifestInfo(m oci.IndexOrManifest) manifestInfo {
 	var info manifestInfo
 	info.descriptors = func(yield func(descInfo) bool) {
+		for i, manifest := range m.Manifests {
+			if !yield(descInfo{
+				name: fmt.Sprintf("manifests[%d]", i),
+				kind: kindManifest,
+				desc: manifest,
+			}) {
+				return
+			}
+		}
 		for i, layer := range m.Layers {
 			if !yield(descInfo{
 				name: fmt.Sprintf("layers[%d]", i),
@@ -95,12 +99,14 @@ func imageInfo(m oci.Manifest) manifestInfo {
 				return
 			}
 		}
-		if !yield(descInfo{
-			name: "config",
-			desc: m.Config,
-			kind: kindBlob,
-		}) {
-			return
+		if m.Config != nil {
+			if !yield(descInfo{
+				name: "config",
+				desc: *m.Config,
+				kind: kindBlob,
+			}) {
+				return
+			}
 		}
 		if m.Subject != nil {
 			if !yield(descInfo{
@@ -122,37 +128,11 @@ func imageInfo(m oci.Manifest) manifestInfo {
 	// missing in an index, the artifactType MUST be omitted. The
 	// descriptors MUST include annotations from the image manifest or
 	// index.
-	info.artifactType = cmp.Or(m.ArtifactType, m.Config.MediaType)
-	info.annotations = m.Annotations
-	if m.Subject != nil {
-		info.subject = m.Subject.Digest
+	if m.Config != nil {
+		info.artifactType = cmp.Or(m.ArtifactType, m.Config.MediaType)
+	} else {
+		info.artifactType = m.ArtifactType
 	}
-	return info
-}
-
-func indexInfo(m ocispec.Index) manifestInfo {
-	var info manifestInfo
-	info.descriptors = func(yield func(descInfo) bool) {
-		for i, manifest := range m.Manifests {
-			if !yield(descInfo{
-				name: fmt.Sprintf("manifests[%d]", i),
-				kind: kindManifest,
-				desc: manifest,
-			}) {
-				return
-			}
-		}
-		if m.Subject != nil {
-			if !yield(descInfo{
-				name: "subject",
-				kind: kindSubjectManifest,
-				desc: *m.Subject,
-			}) {
-				return
-			}
-		}
-	}
-	info.artifactType = m.ArtifactType // Note: no config descriptor to fall back to.
 	info.annotations = m.Annotations
 	if m.Subject != nil {
 		info.subject = m.Subject.Digest

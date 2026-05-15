@@ -87,9 +87,9 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/docker/oci"
 	"github.com/docker/oci/ociauth"
 	"github.com/docker/oci/ociclient"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 func main() {
@@ -117,7 +117,7 @@ func main() {
 	fmt.Printf("media type: %s\n", r.Descriptor().MediaType)
 	fmt.Printf("digest:     %s\n", r.Descriptor().Digest)
 
-	var manifest ocispec.Manifest
+	var manifest oci.IndexOrManifest
 	if err := json.NewDecoder(r).Decode(&manifest); err != nil {
 		panic(err)
 	}

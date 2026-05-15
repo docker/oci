@@ -22,7 +22,7 @@ import (
 	"sync"
 
 	"github.com/docker/oci/internal/ocidocker"
-	"github.com/opencontainers/go-digest"
+	"github.com/docker/oci/ocidigest"
 )
 
 // The following regular expressions derived from code in the
@@ -99,7 +99,7 @@ var referencePat = sync.OnceValue(func() *regexp.Regexp {
 			`(?:` + `(` + domainAndPort + `)` + `/` + `)?` + // capture 1: host
 			`(` + repoName + `)` + // capture 2: repository name
 			`(?:` + `:([^@]+))?` + // capture 3: tag; rely on Go logic to test validity.
-			`(?:` + `@(.+))?` + // capture 4: digest; rely on go-digest to find issues
+			`(?:` + `@(.+))?` + // capture 4: digest; rely on ocidigest to find issues
 			`)$`,
 	)
 })
@@ -131,8 +131,8 @@ type Reference struct {
 	Digest Digest
 }
 
-// Digest is a content-addressable digest. It is an alias for [digest.Digest].
-type Digest = digest.Digest
+// Digest is a content-addressable digest.
+type Digest = ocidigest.Digest
 
 // IsValidHost reports whether s is a valid host (or host:port) part of a reference string.
 func IsValidHost(s string) bool {
@@ -152,7 +152,7 @@ func IsValidTag(s string) bool {
 
 // IsValidDigest reports whether the digest d is well formed.
 func IsValidDigest(d string) bool {
-	_, err := digest.Parse(d)
+	_, err := ocidigest.Parse(d)
 	return err == nil
 }
 
@@ -187,11 +187,16 @@ func ParseRelative(refStr string) (Reference, error) {
 		return Reference{}, fmt.Errorf("invalid reference syntax (%q)", refStr)
 	}
 	var ref Reference
-	ref.Host, ref.Repository, ref.Tag, ref.Digest = m[1], m[2], m[3], Digest(m[4])
+	ref.Host, ref.Repository, ref.Tag = m[1], m[2], m[3]
 	// Check lengths and digest: we don't check these as part of the regexp
 	// because it's more efficient to do it in Go and we get
 	// nicer error messages as a result.
-	if len(ref.Digest) > 0 {
+	if m[4] != "" {
+		var err error
+		ref.Digest, err = ocidigest.Parse(m[4])
+		if err != nil {
+			return Reference{}, fmt.Errorf("invalid digest %q: %v", m[4], err)
+		}
 		if err := ref.Digest.Validate(); err != nil {
 			return Reference{}, fmt.Errorf("invalid digest %q: %v", ref.Digest, err)
 		}
@@ -239,7 +244,8 @@ func isWord(c byte) bool {
 //	[HOST/]NAME[:TAG|@DIGEST]
 func (ref Reference) String() string {
 	var buf strings.Builder
-	buf.Grow(len(ref.Host) + 1 + len(ref.Repository) + 1 + len(ref.Tag) + 1 + len(ref.Digest))
+	digestString := ref.Digest.String()
+	buf.Grow(len(ref.Host) + 1 + len(ref.Repository) + 1 + len(ref.Tag) + 1 + len(digestString))
 	if ref.Host != "" {
 		buf.WriteString(ref.Host)
 		buf.WriteByte('/')
@@ -249,9 +255,9 @@ func (ref Reference) String() string {
 		buf.WriteByte(':')
 		buf.WriteString(ref.Tag)
 	}
-	if len(ref.Digest) > 0 {
+	if digestString != "" {
 		buf.WriteByte('@')
-		buf.WriteString(string(ref.Digest))
+		buf.WriteString(digestString)
 	}
 	return buf.String()
 }

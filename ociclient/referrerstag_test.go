@@ -4,29 +4,34 @@ import (
 	"testing"
 
 	"github.com/docker/oci"
+	"github.com/docker/oci/ocidigest"
 	"github.com/stretchr/testify/require"
 )
+
+func mustDigest(s string) oci.Digest {
+	digest, err := ocidigest.Parse(s)
+	if err != nil {
+		panic(err)
+	}
+	return digest
+}
 
 var referrersTagTests = []struct {
 	digest oci.Digest
 	want   string
 }{{
 	// Test case from the distribution spec.
-	digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	digest: mustDigest("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
 	want:   "sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 }, {
 	// Test case from the distribution spec.
-	digest: "sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	digest: mustDigest("sha512:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
 	want:   "sha512-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-}, {
-	// Test case from the distribution spec.
-	digest: "test+algorithm+using+algorithm+separators+and+lots+of+characters+to+excercise+overall+truncation:alsoSome=InTheEncodedSectionToShowHyphenReplacementAndLotsAndLotsOfCharactersToExcerciseEncodedTruncation",
-	want:   "test-algorithm-using-algorithm-s-alsoSome-InTheEncodedSectionToShowHyphenReplacementAndLotsAndLot",
 }}
 
 func TestReferrersTag(t *testing.T) {
 	for _, test := range referrersTagTests {
-		t.Run(string(test.digest), func(t *testing.T) {
+		t.Run(test.digest.String(), func(t *testing.T) {
 			require.Equal(t, test.want, referrersTag(test.digest))
 		})
 	}

@@ -60,9 +60,6 @@ import (
 	"context"
 	"io"
 	"iter"
-
-	"github.com/docker/oci/ociref"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 // Interface defines a generic interface to a single OCI registry.
@@ -82,16 +79,6 @@ type ReadWriter interface {
 	Reader
 	Writer
 }
-
-// Type aliases for commonly used OCI types.
-type (
-	// Digest is a content-addressable digest. It is an alias for [ociref.Digest].
-	Digest = ociref.Digest
-	// Descriptor describes the disposition of targeted content. It is an alias for [ocispec.Descriptor].
-	Descriptor = ocispec.Descriptor
-	// Manifest provides the `application/vnd.oci.image.manifest.v1+json` mediatype structure. It is an alias for [ocispec.Manifest].
-	Manifest = ocispec.Manifest
-)
 
 // Reader defines registry operations that read blobs, manifests and tags.
 type Reader interface {

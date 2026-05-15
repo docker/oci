@@ -26,10 +26,10 @@ import (
 	"sync"
 
 	"github.com/docker/oci"
-	"github.com/opencontainers/go-digest"
 
 	"github.com/docker/oci/internal/ocirequest"
 	"github.com/docker/oci/ociauth"
+	"github.com/docker/oci/ocidigest"
 )
 
 // This file implements the oci.Writer methods.
@@ -42,7 +42,7 @@ func (c *client) PushManifest(ctx context.Context, repo string, contents []byte,
 	if params != nil && params.Digest != "" {
 		dig = params.Digest
 	} else {
-		dig = digest.FromBytes(contents)
+		dig = ocidigest.FromBytes(contents)
 	}
 	desc := oci.Descriptor{
 		Digest:    dig,
@@ -62,7 +62,7 @@ func (c *client) PushManifest(ctx context.Context, repo string, contents []byte,
 		rreq := &ocirequest.Request{
 			Kind:   ocirequest.ReqManifestPut,
 			Repo:   repo,
-			Digest: string(desc.Digest),
+			Digest: desc.Digest.String(),
 		}
 		_, err := c.putManifest(ctx, rreq, desc)
 		return desc, err
@@ -71,7 +71,7 @@ func (c *client) PushManifest(ctx context.Context, repo string, contents []byte,
 			Kind:   ocirequest.ReqManifestPut,
 			Repo:   repo,
 			Tags:   tags,
-			Digest: string(desc.Digest),
+			Digest: desc.Digest.String(),
 		}
 		createdTags, err := c.putManifest(ctx, rreq, desc)
 		if err != nil || len(createdTags) != len(tags) {
@@ -81,7 +81,7 @@ func (c *client) PushManifest(ctx context.Context, repo string, contents []byte,
 					Kind:   ocirequest.ReqManifestPut,
 					Repo:   repo,
 					Tag:    tag,
-					Digest: string(desc.Digest),
+					Digest: desc.Digest.String(),
 				}
 				_, err = c.putManifest(ctx, rreq, desc)
 				if err != nil {
@@ -120,7 +120,7 @@ func (c *client) MountBlob(ctx context.Context, fromRepo, toRepo string, dig oci
 		Kind:     ocirequest.ReqBlobMount,
 		Repo:     toRepo,
 		FromRepo: fromRepo,
-		Digest:   string(dig),
+		Digest:   dig.String(),
 	}
 	resp, err := c.doRequest(ctx, rreq, http.StatusCreated, http.StatusAccepted)
 	if err != nil {
@@ -171,7 +171,7 @@ func (c *client) PushBlob(ctx context.Context, repo string, desc oci.Descriptor,
 	if err != nil {
 		return oci.Descriptor{}, err
 	}
-	req.URL = urlWithDigest(location, string(desc.Digest))
+	req.URL = urlWithDigest(location, desc.Digest.String())
 	req.ContentLength = desc.Size
 	req.Header.Set("Content-Type", "application/octet-stream")
 	// TODO: per the spec, the content-range header here is unnecessary.
@@ -361,7 +361,7 @@ func (w *blobWriter) flush(buf []byte, commitDigest oci.Digest) error {
 		// (committing the whole blob) which avoids an extra round trip.
 		method = "PUT"
 		expect = http.StatusCreated
-		reqURL = urlWithDigest(reqURL, string(commitDigest))
+		reqURL = urlWithDigest(reqURL, commitDigest.String())
 	}
 	req, err := http.NewRequestWithContext(w.ctx, method, "", concatBody(w.chunk, buf))
 	if err != nil {

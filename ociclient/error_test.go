@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/docker/oci"
+	"github.com/docker/oci/ocidigest"
 	"github.com/docker/oci/ociserver"
-	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -64,21 +64,21 @@ func TestNonJSONErrorResponse(t *testing.T) {
 		require.Equal(t, http.StatusTeapot, herr.StatusCode())
 	}
 	assertStatusCode(func(ctx context.Context, r oci.Interface) error {
-		rd, err := r.GetBlob(ctx, "foo/read", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		rd, err := r.GetBlob(ctx, "foo/read", testDigest)
 		if rd != nil {
 			rd.Close()
 		}
 		return err
 	})
 	assertStatusCode(func(ctx context.Context, r oci.Interface) error {
-		rd, err := r.GetBlobRange(ctx, "foo/read", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 100, 200)
+		rd, err := r.GetBlobRange(ctx, "foo/read", testDigest, 100, 200)
 		if rd != nil {
 			rd.Close()
 		}
 		return err
 	})
 	assertStatusCode(func(ctx context.Context, r oci.Interface) error {
-		rd, err := r.GetManifest(ctx, "foo/read", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		rd, err := r.GetManifest(ctx, "foo/read", testDigest)
 		if rd != nil {
 			rd.Close()
 		}
@@ -92,11 +92,11 @@ func TestNonJSONErrorResponse(t *testing.T) {
 		return err
 	})
 	assertStatusCode(func(ctx context.Context, r oci.Interface) error {
-		_, err := r.ResolveBlob(ctx, "foo/read", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		_, err := r.ResolveBlob(ctx, "foo/read", testDigest)
 		return err
 	})
 	assertStatusCode(func(ctx context.Context, r oci.Interface) error {
-		_, err := r.ResolveManifest(ctx, "foo/read", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		_, err := r.ResolveManifest(ctx, "foo/read", testDigest)
 		return err
 	})
 	assertStatusCode(func(ctx context.Context, r oci.Interface) error {
@@ -106,7 +106,7 @@ func TestNonJSONErrorResponse(t *testing.T) {
 	assertStatusCode(func(ctx context.Context, r oci.Interface) error {
 		_, err := r.PushBlob(ctx, "foo/write", oci.Descriptor{
 			MediaType: "application/json",
-			Digest:    "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			Digest:    testDigest,
 			Size:      3,
 		}, strings.NewReader("foo"))
 		return err
@@ -128,11 +128,11 @@ func TestNonJSONErrorResponse(t *testing.T) {
 		if _, err := w.Write(data); err != nil {
 			return err
 		}
-		_, err = w.Commit(digest.FromBytes(data))
+		_, err = w.Commit(ocidigest.FromBytes(data))
 		return err
 	})
 	assertStatusCode(func(ctx context.Context, r oci.Interface) error {
-		_, err := r.MountBlob(ctx, "foo/read", "foo/write", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		_, err := r.MountBlob(ctx, "foo/read", "foo/write", testDigest)
 		return err
 	})
 	assertStatusCode(func(ctx context.Context, r oci.Interface) error {
@@ -142,10 +142,10 @@ func TestNonJSONErrorResponse(t *testing.T) {
 		return err
 	})
 	assertStatusCode(func(ctx context.Context, r oci.Interface) error {
-		return r.DeleteBlob(ctx, "foo/write", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		return r.DeleteBlob(ctx, "foo/write", testDigest)
 	})
 	assertStatusCode(func(ctx context.Context, r oci.Interface) error {
-		return r.DeleteManifest(ctx, "foo/write", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		return r.DeleteManifest(ctx, "foo/write", testDigest)
 	})
 	assertStatusCode(func(ctx context.Context, r oci.Interface) error {
 		return r.DeleteTag(ctx, "foo/write", "sometag")
@@ -159,7 +159,7 @@ func TestNonJSONErrorResponse(t *testing.T) {
 		return err
 	})
 	assertStatusCode(func(ctx context.Context, r oci.Interface) error {
-		_, err := oci.All(r.Referrers(ctx, "foo/read", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", nil))
+		_, err := oci.All(r.Referrers(ctx, "foo/read", testDigest, nil))
 		return err
 	})
 }

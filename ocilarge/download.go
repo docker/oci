@@ -3,13 +3,12 @@ package ocilarge
 import (
 	"context"
 	"fmt"
-	"hash"
 	"io"
 	"sync"
 	"time"
 
 	"github.com/docker/oci"
-	"github.com/opencontainers/go-digest"
+	"github.com/docker/oci/ocidigest"
 )
 
 // Tuning constants for the adaptive parallel download pipeline.
@@ -88,9 +87,10 @@ func DownloadLargeBlob(ctx context.Context, reg oci.Interface, repo string, dgst
 
 	go runPipeline(ctx, reg, repo, dgst, desc.Size, chunkSize, probeData, pw)
 
+	digester, _ := desc.Digest.Algorithm().New()
 	return &blobReader{
 		r:        pr,
-		digester: desc.Digest.Algorithm().Hash(),
+		digester: digester,
 		desc:     desc,
 		verify:   true,
 	}, nil
@@ -310,9 +310,10 @@ func downloadSingle(ctx context.Context, reg oci.Interface, repo string, dgst oc
 		}
 		pw.Close()
 	}()
+	digester, _ := desc.Digest.Algorithm().New()
 	return &blobReader{
 		r:        pr,
-		digester: desc.Digest.Algorithm().Hash(),
+		digester: digester,
 		desc:     desc,
 		verify:   true,
 	}, nil
@@ -321,7 +322,7 @@ func downloadSingle(ctx context.Context, reg oci.Interface, repo string, dgst oc
 type blobReader struct {
 	r        io.ReadCloser
 	n        int64
-	digester hash.Hash
+	digester ocidigest.Digester
 	desc     oci.Descriptor
 	verify   bool
 }
@@ -333,7 +334,9 @@ func (r *blobReader) Descriptor() oci.Descriptor {
 func (r *blobReader) Read(buf []byte) (int, error) {
 	n, err := r.r.Read(buf)
 	r.n += int64(n)
-	r.digester.Write(buf[:n])
+	if _, writeErr := r.digester.Write(buf[:n]); writeErr != nil {
+		return n, writeErr
+	}
 	if err == nil {
 		if r.n > r.desc.Size {
 			// Fail early when the blob is too big; we can do that even
@@ -351,7 +354,10 @@ func (r *blobReader) Read(buf []byte) (int, error) {
 	if r.n != r.desc.Size {
 		return n, fmt.Errorf("blob size mismatch (%d/%d): %w", r.n, r.desc.Size, oci.ErrSizeInvalid)
 	}
-	gotDigest := digest.NewDigest(r.desc.Digest.Algorithm(), r.digester)
+	gotDigest, err := r.digester.Digest()
+	if err != nil {
+		return n, err
+	}
 	if gotDigest != r.desc.Digest {
 		return n, fmt.Errorf("digest mismatch when reading blob")
 	}

@@ -26,9 +26,9 @@ import (
 	"strconv"
 
 	"github.com/docker/oci"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/docker/oci/internal/ocirequest"
+	"github.com/docker/oci/ocidigest"
 )
 
 const maxPageSize = 10000
@@ -92,9 +92,9 @@ func (r *registry) handleReferrersList(ctx context.Context, resp http.ResponseWr
 		artifactType = ""
 	}
 
-	im := &ocispec.Index{
-		Versioned: v2,
-		MediaType: mediaTypeOCIImageIndex,
+	im := &oci.IndexOrManifest{
+		SchemaVersion: 2,
+		MediaType:     mediaTypeOCIImageIndex,
 	}
 
 	// TODO this could potentially end up with a very large response which we might
@@ -102,7 +102,11 @@ func (r *registry) handleReferrersList(ctx context.Context, resp http.ResponseWr
 	// request, linked to the next one with a Link header. However, arranging that is non-trivial
 	// because we'd need a way to return a link value to the client that enables a fresh
 	// call to Referrers to start where the old one left off. For now, we'll punt.
-	for desc, err := range r.backend.Referrers(ctx, rreq.Repo, oci.Digest(rreq.Digest), &oci.ReferrersParameters{
+	digest, err := ocidigest.Parse(rreq.Digest)
+	if err != nil {
+		return err
+	}
+	for desc, err := range r.backend.Referrers(ctx, rreq.Repo, digest, &oci.ReferrersParameters{
 		ArtifactType: artifactType,
 	}) {
 		if err != nil {

@@ -23,10 +23,9 @@ import (
 	"strconv"
 
 	"github.com/docker/oci"
-	"github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/docker/oci/internal/ocirequest"
+	"github.com/docker/oci/ocidigest"
 )
 
 func (r *registry) handleBlobUploadBlob(ctx context.Context, resp http.ResponseWriter, req *http.Request, rreq *ocirequest.Request) error {
@@ -36,15 +35,22 @@ func (r *registry) handleBlobUploadBlob(ctx context.Context, resp http.ResponseW
 	// TODO check that Content-Type is application/octet-stream?
 	mediaType := mediaTypeOctetStream
 
+	digest, err := ocidigest.Parse(rreq.Digest)
+	if err != nil {
+		return err
+	}
+	if digest == "" {
+		return oci.NewError("badly formed digest", oci.ErrDigestInvalid.Code(), nil)
+	}
 	desc, err := r.backend.PushBlob(req.Context(), rreq.Repo, oci.Descriptor{
 		MediaType: mediaType,
 		Size:      req.ContentLength,
-		Digest:    oci.Digest(rreq.Digest),
+		Digest:    digest,
 	}, req.Body)
 	if err != nil {
 		return err
 	}
-	if err := r.setLocationHeader(resp, false, desc, "/v2/"+rreq.Repo+"/blobs/"+string(desc.Digest)); err != nil {
+	if err := r.setLocationHeader(resp, false, desc, "/v2/"+rreq.Repo+"/blobs/"+desc.Digest.String()); err != nil {
 		return err
 	}
 	resp.WriteHeader(http.StatusCreated)
@@ -140,11 +146,18 @@ func (r *registry) handleBlobCompleteUpload(ctx context.Context, resp http.Respo
 	if _, err := io.Copy(w, req.Body); err != nil {
 		return fmt.Errorf("failed to copy data to %T: %v", w, err)
 	}
-	desc, err := w.Commit(oci.Digest(rreq.Digest))
+	digest, err := ocidigest.Parse(rreq.Digest)
 	if err != nil {
 		return err
 	}
-	if err := r.setLocationHeader(resp, false, desc, "/v2/"+rreq.Repo+"/blobs/"+string(desc.Digest)); err != nil {
+	if digest == "" {
+		return oci.NewError("badly formed digest", oci.ErrDigestInvalid.Code(), nil)
+	}
+	desc, err := w.Commit(digest)
+	if err != nil {
+		return err
+	}
+	if err := r.setLocationHeader(resp, false, desc, "/v2/"+rreq.Repo+"/blobs/"+desc.Digest.String()); err != nil {
 		return err
 	}
 	resp.WriteHeader(http.StatusCreated)
@@ -152,7 +165,14 @@ func (r *registry) handleBlobCompleteUpload(ctx context.Context, resp http.Respo
 }
 
 func (r *registry) handleBlobMount(ctx context.Context, resp http.ResponseWriter, req *http.Request, rreq *ocirequest.Request) error {
-	desc, err := r.backend.MountBlob(ctx, rreq.FromRepo, rreq.Repo, oci.Digest(rreq.Digest))
+	digest, err := ocidigest.Parse(rreq.Digest)
+	if err != nil {
+		return err
+	}
+	if digest == "" {
+		return oci.NewError("badly formed digest", oci.ErrDigestInvalid.Code(), nil)
+	}
+	desc, err := r.backend.MountBlob(ctx, rreq.FromRepo, rreq.Repo, digest)
 	if err != nil {
 		return err
 	}
@@ -174,12 +194,12 @@ func (r *registry) handleManifestPut(ctx context.Context, resp http.ResponseWrit
 	if err != nil {
 		return fmt.Errorf("cannot read content: %v", err)
 	}
-	dig := digest.FromBytes(data)
+	dig := ocidigest.FromBytes(data)
 	params := &oci.PushManifestParameters{}
 	if rreq.Tag != "" {
 		params.Tags = []string{rreq.Tag}
 	} else {
-		if oci.Digest(rreq.Digest) != dig {
+		if rreq.Digest != dig.String() {
 			return oci.ErrDigestInvalid
 		}
 		params.Tags = rreq.Tags
@@ -192,11 +212,11 @@ func (r *registry) handleManifestPut(ctx context.Context, resp http.ResponseWrit
 	if err != nil {
 		return err
 	}
-	if err := r.setLocationHeader(resp, false, desc, "/v2/"+rreq.Repo+"/manifests/"+string(desc.Digest)); err != nil {
+	if err := r.setLocationHeader(resp, false, desc, "/v2/"+rreq.Repo+"/manifests/"+desc.Digest.String()); err != nil {
 		return err
 	}
 	if subjectDesc != nil {
-		resp.Header().Set("OCI-Subject", string(subjectDesc.Digest))
+		resp.Header().Set("OCI-Subject", subjectDesc.Digest.String())
 	}
 	// TODO OCI-Subject header?
 	resp.WriteHeader(http.StatusCreated)
@@ -205,17 +225,19 @@ func (r *registry) handleManifestPut(ctx context.Context, resp http.ResponseWrit
 
 func subjectFromManifest(contentType string, data []byte) (*oci.Descriptor, error) {
 	switch contentType {
-	case ocispec.MediaTypeImageManifest,
-		ocispec.MediaTypeImageIndex:
-		break
-		// TODO other manifest media types.
+	case oci.MediaTypeImageManifest, oci.MediaTypeDockerManifest,
+		oci.MediaTypeImageIndex, oci.MediaTypeDockerManifestList:
 	default:
 		return nil, nil
 	}
-	var m struct {
-		Subject *oci.Descriptor `json:"subject"`
-	}
+	var m oci.IndexOrManifest
 	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, err
+	}
+	if m.MediaType == "" {
+		m.MediaType = contentType
+	}
+	if err := m.Validate(); err != nil {
 		return nil, err
 	}
 	return m.Subject, nil

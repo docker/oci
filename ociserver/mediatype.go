@@ -14,14 +14,12 @@
 
 package ociserver
 
-import (
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-)
+import "github.com/docker/oci"
 
 const (
-	mediaTypeOCIImageIndex      = ocispec.MediaTypeImageIndex
-	mediaTypeOCIManifestSchema1 = ocispec.MediaTypeImageManifest
-	mediaTypeOCIConfigJSON      = ocispec.MediaTypeImageConfig
+	mediaTypeOCIImageIndex      = oci.MediaTypeImageIndex
+	mediaTypeOCIManifestSchema1 = oci.MediaTypeImageManifest
+	mediaTypeOCIConfigJSON      = oci.MediaTypeImageConfig
 	mediaTypeDockerConfigJSON   = "application/vnd.docker.container.image.v1+json"
 	mediaTypeOctetStream        = "application/octet-stream"
 )

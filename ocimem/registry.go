@@ -21,8 +21,8 @@ import (
 	"sync"
 
 	"github.com/docker/oci"
+	"github.com/docker/oci/ocidigest"
 	"github.com/docker/oci/ociref"
-	"github.com/opencontainers/go-digest"
 )
 
 var _ oci.Interface = (*Registry)(nil)
@@ -52,7 +52,7 @@ func (b *blob) descriptor() oci.Descriptor {
 	return oci.Descriptor{
 		MediaType:    b.mediaType,
 		Size:         int64(len(b.data)),
-		Digest:       digest.FromBytes(b.data),
+		Digest:       ocidigest.FromBytes(b.data),
 		ArtifactType: b.info.artifactType,
 		Annotations:  b.info.annotations,
 	}
@@ -142,8 +142,8 @@ func (r *Registry) makeRepo(repoName string) (*repository, error) {
 	}
 	repo := &repository{
 		tags:      make(map[string]oci.Descriptor),
-		manifests: make(map[digest.Digest]*blob),
-		blobs:     make(map[digest.Digest]*blob),
+		manifests: make(map[oci.Digest]*blob),
+		blobs:     make(map[oci.Digest]*blob),
 		uploads:   make(map[string]*Buffer),
 	}
 	r.repos[repoName] = repo
@@ -151,7 +151,7 @@ func (r *Registry) makeRepo(repoName string) (*repository, error) {
 }
 
 // SHA256("")
-const emptyHash = "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+var emptyHash = ocidigest.FromBytes(nil)
 
 // CheckDescriptor checks that the given descriptor matches the given data or,
 // if data is nil, that the descriptor looks sane.
@@ -160,7 +160,7 @@ func CheckDescriptor(desc oci.Descriptor, data []byte) error {
 		return fmt.Errorf("invalid digest: %v", err)
 	}
 	if data != nil {
-		if digest.FromBytes(data) != desc.Digest {
+		if ocidigest.FromBytes(data) != desc.Digest {
 			return fmt.Errorf("digest mismatch")
 		}
 		if desc.Size != int64(len(data)) {

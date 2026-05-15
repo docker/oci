@@ -22,9 +22,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/docker/oci/ocidigest"
 	"github.com/docker/oci/ocimem"
 	"github.com/docker/oci/ociserver"
-	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -674,5 +674,5 @@ func TestCalls(t *testing.T) {
 }
 
 func digestOf(s string) string {
-	return string(digest.FromString(s))
+	return ocidigest.FromBytes([]byte(s)).String()
 }

@@ -10,12 +10,14 @@ import (
 
 	"github.com/docker/oci"
 	"github.com/docker/oci/ociauth"
+	"github.com/docker/oci/ocidigest"
 	"github.com/docker/oci/ocimem"
 	"github.com/docker/oci/ociserver"
-	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+var testDigest = ocidigest.FromBytes([]byte("test"))
 
 func TestAuthScopes(t *testing.T) {
 
@@ -32,22 +34,22 @@ func TestAuthScopes(t *testing.T) {
 	}
 
 	assertScope("repository:foo/bar:pull", func(ctx context.Context, r oci.Interface) {
-		r.GetBlob(ctx, "foo/bar", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		r.GetBlob(ctx, "foo/bar", testDigest)
 	})
 	assertScope("repository:foo/bar:pull", func(ctx context.Context, r oci.Interface) {
-		r.GetBlobRange(ctx, "foo/bar", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 100, 200)
+		r.GetBlobRange(ctx, "foo/bar", testDigest, 100, 200)
 	})
 	assertScope("repository:foo/bar:pull", func(ctx context.Context, r oci.Interface) {
-		r.GetManifest(ctx, "foo/bar", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		r.GetManifest(ctx, "foo/bar", testDigest)
 	})
 	assertScope("repository:foo/bar:pull", func(ctx context.Context, r oci.Interface) {
 		r.GetTag(ctx, "foo/bar", "sometag")
 	})
 	assertScope("repository:foo/bar:pull", func(ctx context.Context, r oci.Interface) {
-		r.ResolveBlob(ctx, "foo/bar", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		r.ResolveBlob(ctx, "foo/bar", testDigest)
 	})
 	assertScope("repository:foo/bar:pull", func(ctx context.Context, r oci.Interface) {
-		r.ResolveManifest(ctx, "foo/bar", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		r.ResolveManifest(ctx, "foo/bar", testDigest)
 	})
 	assertScope("repository:foo/bar:pull", func(ctx context.Context, r oci.Interface) {
 		r.ResolveTag(ctx, "foo/bar", "sometag")
@@ -55,7 +57,7 @@ func TestAuthScopes(t *testing.T) {
 	assertScope("repository:foo/bar:push", func(ctx context.Context, r oci.Interface) {
 		r.PushBlob(ctx, "foo/bar", oci.Descriptor{
 			MediaType: "application/json",
-			Digest:    "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			Digest:    testDigest,
 			Size:      3,
 		}, strings.NewReader("foo"))
 	})
@@ -69,11 +71,11 @@ func TestAuthScopes(t *testing.T) {
 		w, err = r.PushBlobChunkedResume(ctx, "foo/bar", id, 3, 0)
 		require.NoError(t, err)
 		w.Write([]byte("bar"))
-		_, err = w.Commit(digest.FromString("foobar"))
+		_, err = w.Commit(ocidigest.FromBytes([]byte("foobar")))
 		require.NoError(t, err)
 	})
 	assertScope("repository:x/y:pull repository:z/w:push", func(ctx context.Context, r oci.Interface) {
-		r.MountBlob(ctx, "x/y", "z/w", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		r.MountBlob(ctx, "x/y", "z/w", testDigest)
 	})
 	assertScope("repository:foo/bar:push", func(ctx context.Context, r oci.Interface) {
 		r.PushManifest(ctx, "foo/bar", []byte("something"), "application/json", &oci.PushManifestParameters{
@@ -81,10 +83,10 @@ func TestAuthScopes(t *testing.T) {
 		})
 	})
 	assertScope("repository:foo/bar:push", func(ctx context.Context, r oci.Interface) {
-		r.DeleteBlob(ctx, "foo/bar", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		r.DeleteBlob(ctx, "foo/bar", testDigest)
 	})
 	assertScope("repository:foo/bar:push", func(ctx context.Context, r oci.Interface) {
-		r.DeleteManifest(ctx, "foo/bar", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		r.DeleteManifest(ctx, "foo/bar", testDigest)
 	})
 	assertScope("repository:foo/bar:push", func(ctx context.Context, r oci.Interface) {
 		r.DeleteTag(ctx, "foo/bar", "sometag")
@@ -96,7 +98,7 @@ func TestAuthScopes(t *testing.T) {
 		oci.All(r.Tags(ctx, "foo/bar", nil))
 	})
 	assertScope("repository:foo/bar:pull", func(ctx context.Context, r oci.Interface) {
-		oci.All(r.Referrers(ctx, "foo/bar", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", nil))
+		oci.All(r.Referrers(ctx, "foo/bar", testDigest, nil))
 	})
 }
 

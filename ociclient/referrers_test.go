@@ -11,8 +11,7 @@ import (
 	"testing"
 
 	"github.com/docker/oci"
-	"github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/docker/oci/ocidigest"
 	"github.com/stretchr/testify/require"
 
 	"github.com/docker/oci/ociclient"
@@ -39,28 +38,28 @@ func TestReferrersFallback(t *testing.T) {
 	config := pushScratchConfig(t, client, repo)
 
 	// Push a manifest to refer to.
-	subject := pushManifest(t, client, repo, "sometag", &oci.Manifest{
-		MediaType: ocispec.MediaTypeImageManifest,
-		Config:    withMediaType(config, "subject/mediatype"),
-	}, ocispec.MediaTypeImageManifest)
+	subject := pushManifest(t, client, repo, "sometag", &oci.IndexOrManifest{
+		MediaType: oci.MediaTypeImageManifest,
+		Config:    ref(withMediaType(config, "subject/mediatype")),
+	}, oci.MediaTypeImageManifest)
 
-	index := &ocispec.Index{
-		MediaType: ocispec.MediaTypeImageIndex,
+	index := &oci.IndexOrManifest{
+		MediaType: oci.MediaTypeImageIndex,
 	}
 	// Then push some manifests that refer to it and update the index at the same time.
 	for i := range 5 {
 		artifactType := fmt.Sprintf("referrer/%d", i)
-		desc := pushManifest(t, client, repo, "", &oci.Manifest{
-			MediaType: ocispec.MediaTypeImageManifest,
+		desc := pushManifest(t, client, repo, "", &oci.IndexOrManifest{
+			MediaType: oci.MediaTypeImageManifest,
 			Subject:   &subject,
-			Config:    withMediaType(config, artifactType),
-		}, ocispec.MediaTypeImageManifest)
+			Config:    ref(withMediaType(config, artifactType)),
+		}, oci.MediaTypeImageManifest)
 		desc.ArtifactType = artifactType
 		index.Manifests = append(index.Manifests, desc)
 	}
 
 	// Then push the index to the referrers tag.
-	pushManifest(t, client, repo, strings.ReplaceAll(string(subject.Digest), ":", "-"), index, ocispec.MediaTypeImageIndex)
+	pushManifest(t, client, repo, strings.ReplaceAll(subject.Digest.String(), ":", "-"), index, oci.MediaTypeImageIndex)
 
 	// Then ask for the referrers.
 	var got []oci.Descriptor
@@ -84,10 +83,14 @@ func withMediaType(desc oci.Descriptor, mediaType string) oci.Descriptor {
 	return desc
 }
 
+func ref[T any](x T) *T {
+	return &x
+}
+
 func pushScratchConfig(t *testing.T, client oci.Interface, repo string) oci.Descriptor {
 	content := []byte("{}")
-	desc := ocispec.Descriptor{
-		Digest: digest.FromBytes(content),
+	desc := oci.Descriptor{
+		Digest: ocidigest.FromBytes(content),
 		Size:   int64(len(content)),
 	}
 	_, err := client.PushBlob(context.Background(), repo, desc, bytes.NewReader(content))

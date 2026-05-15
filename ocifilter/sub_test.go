@@ -26,8 +26,6 @@ import (
 	"github.com/docker/oci/ociauth"
 	"github.com/docker/oci/ocimem"
 	"github.com/docker/oci/ocitest"
-	"github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,14 +38,14 @@ func TestSub(t *testing.T) {
 				"b1":      "hello",
 				"scratch": "{}",
 			},
-			Manifests: map[string]oci.Manifest{
+			Manifests: map[string]oci.IndexOrManifest{
 				"m1": {
-					MediaType: ocispec.MediaTypeImageManifest,
-					Config: oci.Descriptor{
-						Digest: "scratch",
-					},
+					MediaType: oci.MediaTypeImageManifest,
+					Config: ref(oci.Descriptor{
+						Digest: ocitest.DigestRef("scratch"),
+					}),
 					Layers: []oci.Descriptor{{
-						Digest: "b1",
+						Digest: ocitest.DigestRef("b1"),
 					}},
 				},
 			},
@@ -60,12 +58,12 @@ func TestSub(t *testing.T) {
 			Blobs: map[string]string{
 				"scratch": "{}",
 			},
-			Manifests: map[string]oci.Manifest{
+			Manifests: map[string]oci.IndexOrManifest{
 				"m1": {
-					MediaType: ocispec.MediaTypeImageManifest,
-					Config: oci.Descriptor{
-						Digest: "scratch",
-					},
+					MediaType: oci.MediaTypeImageManifest,
+					Config: ref(oci.Descriptor{
+						Digest: ocitest.DigestRef("scratch"),
+					}),
 				},
 			},
 			Tags: map[string]string{
@@ -76,12 +74,12 @@ func TestSub(t *testing.T) {
 			Blobs: map[string]string{
 				"scratch": "{}",
 			},
-			Manifests: map[string]oci.Manifest{
+			Manifests: map[string]oci.IndexOrManifest{
 				"m1": {
-					MediaType: ocispec.MediaTypeImageManifest,
-					Config: oci.Descriptor{
-						Digest: "scratch",
-					},
+					MediaType: oci.MediaTypeImageManifest,
+					Config: ref(oci.Descriptor{
+						Digest: ocitest.DigestRef("scratch"),
+					}),
 				},
 			},
 			Tags: map[string]string{
@@ -117,7 +115,7 @@ func TestSubMaintainsAuthScope(t *testing.T) {
 	// we use the GetBlob entry point as a proxy for testing all the entry points.
 	// TODO it would be nice to have a reusable way (in ocitest, probably) of testing general properties
 	// across all oci.Interface methods.
-	_, _ = r.GetBlob(ctx, "some/repo", "sha256:fffff")
+	_, _ = r.GetBlob(ctx, "some/repo", ocitest.DigestRef("scope"))
 	wantScope := ociauth.ParseScope(
 		"other registry:catalog:* repository:foo/bar/a/b:pull,push repository:foo/bar/foo:delete,push",
 	)
@@ -134,11 +132,11 @@ func (r contextChecker) GetBlob(ctx context.Context, repo string, digest oci.Dig
 	return nil, fmt.Errorf("nope")
 }
 
-func getManifest(t *testing.T, r oci.Interface, repo string, dg digest.Digest) oci.Manifest {
+func getManifest(t *testing.T, r oci.Interface, repo string, dg oci.Digest) oci.IndexOrManifest {
 	rd, err := r.GetManifest(context.Background(), repo, dg)
 	require.NoError(t, err)
 	defer rd.Close()
-	var m oci.Manifest
+	var m oci.IndexOrManifest
 	data, err := io.ReadAll(rd)
 	require.NoError(t, err)
 	err = json.Unmarshal(data, &m)
@@ -146,11 +144,15 @@ func getManifest(t *testing.T, r oci.Interface, repo string, dg digest.Digest) o
 	return m
 }
 
-func getBlob(t *testing.T, r oci.Interface, repo string, dg digest.Digest) []byte {
+func getBlob(t *testing.T, r oci.Interface, repo string, dg oci.Digest) []byte {
 	rd, err := r.GetBlob(context.Background(), repo, dg)
 	require.NoError(t, err)
 	defer rd.Close()
 	data, err := io.ReadAll(rd)
 	require.NoError(t, err)
 	return data
+}
+
+func ref[T any](x T) *T {
+	return &x
 }

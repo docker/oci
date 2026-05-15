@@ -21,7 +21,7 @@ import (
 	"fmt"
 
 	"github.com/docker/oci"
-	"github.com/opencontainers/go-digest"
+	"github.com/docker/oci/ocidigest"
 )
 
 // Immutable returns a registry wrap r but only allows content to be
@@ -47,7 +47,7 @@ func (r immutable) PushManifest(ctx context.Context, repo string, contents []byt
 	if params != nil && params.Digest != "" {
 		dig = params.Digest
 	} else {
-		dig = digest.FromBytes(contents)
+		dig = ocidigest.FromBytes(contents)
 	}
 
 	for _, tag := range tags {

@@ -23,14 +23,14 @@ import (
 
 	"github.com/docker/oci"
 	"github.com/docker/oci/internal/ocirequest"
-	"github.com/opencontainers/go-digest"
+	"github.com/docker/oci/ocidigest"
 )
 
 func (c *client) GetBlob(ctx context.Context, repo string, digest oci.Digest) (oci.BlobReader, error) {
 	return c.read(ctx, &ocirequest.Request{
 		Kind:   ocirequest.ReqBlobGet,
 		Repo:   repo,
-		Digest: string(digest),
+		Digest: digest.String(),
 	})
 }
 
@@ -41,7 +41,7 @@ func (c *client) GetBlobRange(ctx context.Context, repo string, digest oci.Diges
 	rreq := &ocirequest.Request{
 		Kind:   ocirequest.ReqBlobGet,
 		Repo:   repo,
-		Digest: string(digest),
+		Digest: digest.String(),
 	}
 	req, err := newRequest(ctx, rreq, nil)
 	if err != nil {
@@ -60,7 +60,8 @@ func (c *client) GetBlobRange(ctx context.Context, repo string, digest oci.Diges
 	// Fix that either by returning ErrUnsupported or by reading the whole
 	// blob and returning only the required portion.
 	defer closeOnError(&_err, resp.Body)
-	desc, err := descriptorFromResponse(resp, oci.Digest(rreq.Digest), requireSize)
+	knownDigest, _ := ocidigest.Parse(rreq.Digest)
+	desc, err := descriptorFromResponse(resp, knownDigest, requireSize)
 	if err != nil {
 		return nil, fmt.Errorf("invalid descriptor in response: %v", err)
 	}
@@ -71,7 +72,7 @@ func (c *client) ResolveBlob(ctx context.Context, repo string, digest oci.Digest
 	return c.resolve(ctx, &ocirequest.Request{
 		Kind:   ocirequest.ReqBlobHead,
 		Repo:   repo,
-		Digest: string(digest),
+		Digest: digest.String(),
 	})
 }
 
@@ -79,7 +80,7 @@ func (c *client) ResolveManifest(ctx context.Context, repo string, digest oci.Di
 	return c.resolve(ctx, &ocirequest.Request{
 		Kind:   ocirequest.ReqManifestHead,
 		Repo:   repo,
-		Digest: string(digest),
+		Digest: digest.String(),
 	})
 }
 
@@ -97,7 +98,8 @@ func (c *client) resolve(ctx context.Context, rreq *ocirequest.Request) (oci.Des
 		return oci.Descriptor{}, err
 	}
 	resp.Body.Close()
-	desc, err := descriptorFromResponse(resp, oci.Digest(rreq.Digest), requireSize|requireDigest)
+	knownDigest, _ := ocidigest.Parse(rreq.Digest)
+	desc, err := descriptorFromResponse(resp, knownDigest, requireSize|requireDigest)
 	if err != nil {
 		return oci.Descriptor{}, fmt.Errorf("invalid descriptor in response: %v", err)
 	}
@@ -108,7 +110,7 @@ func (c *client) GetManifest(ctx context.Context, repo string, digest oci.Digest
 	return c.read(ctx, &ocirequest.Request{
 		Kind:   ocirequest.ReqManifestGet,
 		Repo:   repo,
-		Digest: string(digest),
+		Digest: digest.String(),
 	})
 }
 
@@ -138,7 +140,8 @@ func (c *client) read(ctx context.Context, rreq *ocirequest.Request) (_ oci.Blob
 		return nil, err
 	}
 	defer closeOnError(&_err, resp.Body)
-	desc, err := descriptorFromResponse(resp, oci.Digest(rreq.Digest), requireSize)
+	knownDigest, _ := ocidigest.Parse(rreq.Digest)
+	desc, err := descriptorFromResponse(resp, knownDigest, requireSize)
 	if err != nil {
 		return nil, fmt.Errorf("invalid descriptor in response: %v", err)
 	}
@@ -165,7 +168,7 @@ func (c *client) read(ctx context.Context, rreq *ocirequest.Request) (_ oci.Blob
 			if int64(len(data)) != desc.Size {
 				return nil, fmt.Errorf("body size mismatch")
 			}
-			desc.Digest = digest.FromBytes(data)
+			desc.Digest = ocidigest.FromBytes(data)
 			resp.Body.Close()
 			resp.Body = io.NopCloser(bytes.NewReader(data))
 		} else {
@@ -176,7 +179,8 @@ func (c *client) read(ctx context.Context, rreq *ocirequest.Request) (_ oci.Blob
 				return nil, err
 			}
 			resp1.Body.Close()
-			desc, err = descriptorFromResponse(resp1, oci.Digest(rreq1.Digest), requireSize|requireDigest)
+			knownDigest, _ := ocidigest.Parse(rreq1.Digest)
+			desc, err = descriptorFromResponse(resp1, knownDigest, requireSize|requireDigest)
 			if err != nil {
 				return nil, err
 			}
