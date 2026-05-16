@@ -3,6 +3,7 @@ module github.com/docker/oci
 go 1.25.0
 
 require (
+	github.com/klauspost/compress v1.18.6
 	github.com/opencontainers/go-digest v1.0.0
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/rogpeppe/go-internal v1.14.1
