@@ -8,8 +8,6 @@ import (
 
 	"github.com/docker/oci"
 	"github.com/docker/oci/ocitest"
-	"github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,15 +21,15 @@ var pushManifestTests = []struct {
 	wantError    string
 }{{
 	testName:  "NonExistentConfigReference",
-	mediaType: ocispec.MediaTypeImageManifest,
+	mediaType: oci.MediaTypeImageManifest,
 	manifestData: func(ocitest.PushedRepoContent) []byte {
-		return mustJSONMarshal(oci.Manifest{
-			MediaType: ocispec.MediaTypeImageManifest,
-			Config: oci.Descriptor{
+		return mustJSONMarshal(oci.IndexOrManifest{
+			MediaType: oci.MediaTypeImageManifest,
+			Config: ref(oci.Descriptor{
 				MediaType: "application/something",
 				Size:      1,
-				Digest:    digest.FromString("a"),
-			},
+				Digest:    ocitest.DigestRef("a"),
+			}),
 		})
 	},
 	wantError: `invalid manifest: blob for config not found`,
@@ -42,15 +40,15 @@ var pushManifestTests = []struct {
 			"a": "{}",
 		},
 	},
-	mediaType: ocispec.MediaTypeImageManifest,
+	mediaType: oci.MediaTypeImageManifest,
 	manifestData: func(content ocitest.PushedRepoContent) []byte {
-		return mustJSONMarshal(oci.Manifest{
-			MediaType: ocispec.MediaTypeImageManifest,
-			Config:    content.Blobs["a"],
+		return mustJSONMarshal(oci.IndexOrManifest{
+			MediaType: oci.MediaTypeImageManifest,
+			Config:    ref(content.Blobs["a"]),
 			Layers: []oci.Descriptor{{
 				MediaType: "application/something",
 				Size:      1,
-				Digest:    digest.FromString("b"),
+				Digest:    ocitest.DigestRef("b"),
 			}},
 		})
 	},
@@ -62,29 +60,29 @@ var pushManifestTests = []struct {
 			"a": "{}",
 		},
 	},
-	mediaType: ocispec.MediaTypeImageManifest,
+	mediaType: oci.MediaTypeImageManifest,
 	manifestData: func(content ocitest.PushedRepoContent) []byte {
-		return mustJSONMarshal(oci.Manifest{
-			MediaType: ocispec.MediaTypeImageManifest,
-			Config:    content.Blobs["a"],
+		return mustJSONMarshal(oci.IndexOrManifest{
+			MediaType: oci.MediaTypeImageManifest,
+			Config:    ref(content.Blobs["a"]),
 			Subject: &oci.Descriptor{
 				MediaType: "application/something",
 				Size:      1,
-				Digest:    digest.FromString("b"),
+				Digest:    ocitest.DigestRef("b"),
 			},
 		})
 	},
 	// Non-existent subject references are explicitly allowed.
 }, {
 	testName:  "NonExistentImageIndexManifestReference",
-	mediaType: ocispec.MediaTypeImageIndex,
+	mediaType: oci.MediaTypeImageIndex,
 	manifestData: func(content ocitest.PushedRepoContent) []byte {
-		return mustJSONMarshal(ocispec.Index{
-			MediaType: ocispec.MediaTypeImageIndex,
+		return mustJSONMarshal(oci.IndexOrManifest{
+			MediaType: oci.MediaTypeImageIndex,
 			Manifests: []oci.Descriptor{{
-				MediaType: ocispec.MediaTypeImageManifest,
+				MediaType: oci.MediaTypeImageManifest,
 				Size:      1,
-				Digest:    digest.FromString("a"),
+				Digest:    ocitest.DigestRef("a"),
 			}},
 		})
 	},
@@ -99,28 +97,28 @@ var pushManifestTests = []struct {
 	config: Config{
 		LaxChildReferences: true,
 	},
-	mediaType: ocispec.MediaTypeImageManifest,
+	mediaType: oci.MediaTypeImageManifest,
 	manifestData: func(content ocitest.PushedRepoContent) []byte {
-		return mustJSONMarshal(oci.Manifest{
-			MediaType: ocispec.MediaTypeImageManifest,
-			Config:    content.Blobs["a"],
+		return mustJSONMarshal(oci.IndexOrManifest{
+			MediaType: oci.MediaTypeImageManifest,
+			Config:    ref(content.Blobs["a"]),
 			Layers: []oci.Descriptor{{
 				MediaType: "application/something",
 				Size:      1,
-				Digest:    digest.FromString("b"),
+				Digest:    ocitest.DigestRef("b"),
 			}},
 		})
 	},
 }, {
 	testName:  "NonExistentImageIndexSubjectReference",
-	mediaType: ocispec.MediaTypeImageIndex,
+	mediaType: oci.MediaTypeImageIndex,
 	manifestData: func(content ocitest.PushedRepoContent) []byte {
-		return mustJSONMarshal(ocispec.Index{
-			MediaType: ocispec.MediaTypeImageIndex,
+		return mustJSONMarshal(oci.IndexOrManifest{
+			MediaType: oci.MediaTypeImageIndex,
 			Subject: &oci.Descriptor{
 				MediaType: "application/something",
 				Size:      1,
-				Digest:    digest.FromString("b"),
+				Digest:    ocitest.DigestRef("b"),
 			},
 		})
 	},
@@ -132,14 +130,14 @@ var pushManifestTests = []struct {
 			"a": "{}",
 			"b": "other",
 		},
-		Manifests: map[string]oci.Manifest{
+		Manifests: map[string]oci.IndexOrManifest{
 			"m": {
-				MediaType: ocispec.MediaTypeImageManifest,
-				Config: oci.Descriptor{
-					Digest: "a",
-				},
+				MediaType: oci.MediaTypeImageManifest,
+				Config: ref(oci.Descriptor{
+					Digest: ocitest.DigestRef("a"),
+				}),
 				Layers: []oci.Descriptor{{
-					Digest: "a",
+					Digest: ocitest.DigestRef("a"),
 				}},
 			},
 		},
@@ -150,12 +148,12 @@ var pushManifestTests = []struct {
 	config: Config{
 		ImmutableTags: true,
 	},
-	mediaType: ocispec.MediaTypeImageManifest,
+	mediaType: oci.MediaTypeImageManifest,
 	tag:       "sometag",
 	manifestData: func(content ocitest.PushedRepoContent) []byte {
-		return mustJSONMarshal(oci.Manifest{
-			MediaType: ocispec.MediaTypeImageManifest,
-			Config:    content.Blobs["a"],
+		return mustJSONMarshal(oci.IndexOrManifest{
+			MediaType: oci.MediaTypeImageManifest,
+			Config:    ref(content.Blobs["a"]),
 			Layers:    []oci.Descriptor{content.Blobs["a"]},
 			Annotations: map[string]string{
 				"different": "thing",
@@ -170,14 +168,14 @@ var pushManifestTests = []struct {
 			"a": "{}",
 			"b": "other",
 		},
-		Manifests: map[string]oci.Manifest{
+		Manifests: map[string]oci.IndexOrManifest{
 			"m": {
-				MediaType: ocispec.MediaTypeImageManifest,
-				Config: oci.Descriptor{
-					Digest: "a",
-				},
+				MediaType: oci.MediaTypeImageManifest,
+				Config: ref(oci.Descriptor{
+					Digest: ocitest.DigestRef("a"),
+				}),
 				Layers: []oci.Descriptor{{
-					Digest: "a",
+					Digest: ocitest.DigestRef("a"),
 				}},
 			},
 		},
@@ -188,7 +186,7 @@ var pushManifestTests = []struct {
 	config: Config{
 		ImmutableTags: true,
 	},
-	mediaType: ocispec.MediaTypeImageManifest,
+	mediaType: oci.MediaTypeImageManifest,
 	tag:       "sometag",
 	manifestData: func(content ocitest.PushedRepoContent) []byte {
 		return content.ManifestData["m"]
@@ -200,14 +198,14 @@ var pushManifestTests = []struct {
 			"a": "{}",
 			"b": "other",
 		},
-		Manifests: map[string]oci.Manifest{
+		Manifests: map[string]oci.IndexOrManifest{
 			"m": {
-				MediaType: ocispec.MediaTypeImageManifest,
-				Config: oci.Descriptor{
-					Digest: "a",
-				},
+				MediaType: oci.MediaTypeImageManifest,
+				Config: ref(oci.Descriptor{
+					Digest: ocitest.DigestRef("a"),
+				}),
 				Layers: []oci.Descriptor{{
-					Digest: "a",
+					Digest: ocitest.DigestRef("a"),
 				}},
 			},
 		},
@@ -231,14 +229,14 @@ var pushManifestTests = []struct {
 			"a": "{}",
 			"b": "other",
 		},
-		Manifests: map[string]oci.Manifest{
+		Manifests: map[string]oci.IndexOrManifest{
 			"m": {
-				MediaType: ocispec.MediaTypeImageManifest,
-				Config: oci.Descriptor{
-					Digest: "a",
-				},
+				MediaType: oci.MediaTypeImageManifest,
+				Config: ref(oci.Descriptor{
+					Digest: ocitest.DigestRef("a"),
+				}),
 				Layers: []oci.Descriptor{{
-					Digest: "a",
+					Digest: ocitest.DigestRef("a"),
 				}},
 			},
 		},
@@ -246,12 +244,12 @@ var pushManifestTests = []struct {
 			"sometag": "m",
 		},
 	},
-	mediaType: ocispec.MediaTypeImageManifest,
+	mediaType: oci.MediaTypeImageManifest,
 	tag:       "sometag",
 	manifestData: func(content ocitest.PushedRepoContent) []byte {
-		return mustJSONMarshal(oci.Manifest{
-			MediaType: ocispec.MediaTypeImageManifest,
-			Config:    content.Blobs["a"],
+		return mustJSONMarshal(oci.IndexOrManifest{
+			MediaType: oci.MediaTypeImageManifest,
+			Config:    ref(content.Blobs["a"]),
 			Layers:    []oci.Descriptor{content.Blobs["a"]},
 			Annotations: map[string]string{
 				"different": "thing",
@@ -295,7 +293,7 @@ var deleteBlobTests = []struct {
 }{{
 	testName: "NonExistentRepo",
 	getDigest: func(content ocitest.PushedRepoContent) oci.Digest {
-		return digest.FromString("blshdfsvg")
+		return ocitest.DigestRef("blshdfsvg")
 	},
 	wantError: "name unknown: repository name not known to registry",
 }, {
@@ -306,7 +304,7 @@ var deleteBlobTests = []struct {
 		},
 	},
 	getDigest: func(content ocitest.PushedRepoContent) oci.Digest {
-		return digest.FromString("blshdfsvg")
+		return ocitest.DigestRef("blshdfsvg")
 	},
 	wantError: "blob unknown: blob unknown to registry",
 }, {
@@ -318,14 +316,14 @@ var deleteBlobTests = []struct {
 		Blobs: map[string]string{
 			"a": "{}",
 		},
-		Manifests: map[string]oci.Manifest{
+		Manifests: map[string]oci.IndexOrManifest{
 			"m": {
-				MediaType: ocispec.MediaTypeImageManifest,
-				Config: oci.Descriptor{
-					Digest: "a",
-				},
+				MediaType: oci.MediaTypeImageManifest,
+				Config: ref(oci.Descriptor{
+					Digest: ocitest.DigestRef("a"),
+				}),
 				Layers: []oci.Descriptor{{
-					Digest: "a",
+					Digest: ocitest.DigestRef("a"),
 				}},
 			},
 		},
@@ -347,20 +345,20 @@ var deleteBlobTests = []struct {
 			"a": "{}",
 			"b": "other",
 		},
-		Manifests: map[string]oci.Manifest{
+		Manifests: map[string]oci.IndexOrManifest{
 			"m0": {
-				MediaType: ocispec.MediaTypeImageManifest,
-				Config: oci.Descriptor{
-					Digest: "a",
-				},
+				MediaType: oci.MediaTypeImageManifest,
+				Config: ref(oci.Descriptor{
+					Digest: ocitest.DigestRef("a"),
+				}),
 			},
 			"m1": {
-				MediaType: ocispec.MediaTypeImageManifest,
-				Config: oci.Descriptor{
-					Digest: "b",
-				},
+				MediaType: oci.MediaTypeImageManifest,
+				Config: ref(oci.Descriptor{
+					Digest: ocitest.DigestRef("b"),
+				}),
 				Subject: &oci.Descriptor{
-					Digest: "m0",
+					Digest: ocitest.DigestRef("m0"),
 				},
 			},
 		},
@@ -409,7 +407,7 @@ var deleteManifestTests = []struct {
 }{{
 	testName: "NonExistentRepo",
 	getDigest: func(content ocitest.PushedRepoContent) oci.Digest {
-		return digest.FromString("blshdfsvg")
+		return ocitest.DigestRef("blshdfsvg")
 	},
 	wantError: "name unknown: repository name not known to registry",
 }, {
@@ -420,7 +418,7 @@ var deleteManifestTests = []struct {
 		},
 	},
 	getDigest: func(content ocitest.PushedRepoContent) oci.Digest {
-		return digest.FromString("blshdfsvg")
+		return ocitest.DigestRef("blshdfsvg")
 	},
 	wantError: "manifest unknown: manifest unknown to registry",
 }, {
@@ -432,12 +430,12 @@ var deleteManifestTests = []struct {
 		Blobs: map[string]string{
 			"a": "{}",
 		},
-		Manifests: map[string]oci.Manifest{
+		Manifests: map[string]oci.IndexOrManifest{
 			"m": {
-				MediaType: ocispec.MediaTypeImageManifest,
-				Config: oci.Descriptor{
-					Digest: "a",
-				},
+				MediaType: oci.MediaTypeImageManifest,
+				Config: ref(oci.Descriptor{
+					Digest: ocitest.DigestRef("a"),
+				}),
 			},
 		},
 		Tags: map[string]string{
@@ -458,20 +456,20 @@ var deleteManifestTests = []struct {
 			"a": "{}",
 			"b": "other",
 		},
-		Manifests: map[string]oci.Manifest{
+		Manifests: map[string]oci.IndexOrManifest{
 			"m0": {
-				MediaType: ocispec.MediaTypeImageManifest,
-				Config: oci.Descriptor{
-					Digest: "a",
-				},
+				MediaType: oci.MediaTypeImageManifest,
+				Config: ref(oci.Descriptor{
+					Digest: ocitest.DigestRef("a"),
+				}),
 			},
 			"m1": {
-				MediaType: ocispec.MediaTypeImageManifest,
-				Config: oci.Descriptor{
-					Digest: "b",
-				},
+				MediaType: oci.MediaTypeImageManifest,
+				Config: ref(oci.Descriptor{
+					Digest: ocitest.DigestRef("b"),
+				}),
 				Subject: &oci.Descriptor{
-					Digest: "m0",
+					Digest: ocitest.DigestRef("m0"),
 				},
 			},
 		},
@@ -539,12 +537,12 @@ var deleteTagTests = []struct {
 		Blobs: map[string]string{
 			"a": "{}",
 		},
-		Manifests: map[string]oci.Manifest{
+		Manifests: map[string]oci.IndexOrManifest{
 			"m": {
-				MediaType: ocispec.MediaTypeImageManifest,
-				Config: oci.Descriptor{
-					Digest: "a",
-				},
+				MediaType: oci.MediaTypeImageManifest,
+				Config: ref(oci.Descriptor{
+					Digest: ocitest.DigestRef("a"),
+				}),
 			},
 		},
 		Tags: map[string]string{
@@ -560,20 +558,20 @@ var deleteTagTests = []struct {
 			"a": "{}",
 			"b": "other",
 		},
-		Manifests: map[string]oci.Manifest{
+		Manifests: map[string]oci.IndexOrManifest{
 			"m0": {
-				MediaType: ocispec.MediaTypeImageManifest,
-				Config: oci.Descriptor{
-					Digest: "a",
-				},
+				MediaType: oci.MediaTypeImageManifest,
+				Config: ref(oci.Descriptor{
+					Digest: ocitest.DigestRef("a"),
+				}),
 			},
 			"m1": {
-				MediaType: ocispec.MediaTypeImageManifest,
-				Config: oci.Descriptor{
-					Digest: "b",
-				},
+				MediaType: oci.MediaTypeImageManifest,
+				Config: ref(oci.Descriptor{
+					Digest: ocitest.DigestRef("b"),
+				}),
 				Subject: &oci.Descriptor{
-					Digest: "m0",
+					Digest: ocitest.DigestRef("m0"),
 				},
 			},
 		},
@@ -623,6 +621,10 @@ func mustJSONMarshal(x any) []byte {
 	return data
 }
 
+func ref[T any](x T) *T {
+	return &x
+}
+
 func TestTagsLimit(t *testing.T) {
 	ctx := context.Background()
 	r := ocitest.NewRegistry(t, New())
@@ -631,12 +633,12 @@ func TestTagsLimit(t *testing.T) {
 			Blobs: map[string]string{
 				"a": "{}",
 			},
-			Manifests: map[string]oci.Manifest{
+			Manifests: map[string]oci.IndexOrManifest{
 				"m": {
-					MediaType: ocispec.MediaTypeImageManifest,
-					Config: oci.Descriptor{
-						Digest: "a",
-					},
+					MediaType: oci.MediaTypeImageManifest,
+					Config: ref(oci.Descriptor{
+						Digest: ocitest.DigestRef("a"),
+					}),
 				},
 			},
 			Tags: map[string]string{

@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"hash"
 	"io"
 	"log"
 	"net/http"
@@ -31,11 +30,10 @@ import (
 	"sync/atomic"
 
 	"github.com/docker/oci"
-	"github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/docker/oci/internal/ocirequest"
 	"github.com/docker/oci/ociauth"
+	"github.com/docker/oci/ocidigest"
 	"github.com/docker/oci/ociref"
 )
 
@@ -135,7 +133,7 @@ const (
 //
 // Note: this implies that the Digest field will be empty if there is no
 // digest in the response and knownDigest is empty.
-func descriptorFromResponse(resp *http.Response, knownDigest digest.Digest, require descriptorRequired) (oci.Descriptor, error) {
+func descriptorFromResponse(resp *http.Response, knownDigest oci.Digest, require descriptorRequired) (oci.Descriptor, error) {
 	contentType := resp.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "application/octet-stream"
@@ -163,9 +161,14 @@ func descriptorFromResponse(resp *http.Response, knownDigest digest.Digest, requ
 			size = resp.ContentLength
 		}
 	}
-	digest := digest.Digest(resp.Header.Get("Docker-Content-Digest"))
-	if digest != "" {
-		if !ociref.IsValidDigest(string(digest)) {
+	var digest oci.Digest
+	if digestHeader := resp.Header.Get("Docker-Content-Digest"); digestHeader != "" {
+		var err error
+		digest, err = ocidigest.Parse(digestHeader)
+		if err != nil {
+			return oci.Descriptor{}, fmt.Errorf("bad digest %q found in response: %v", digestHeader, err)
+		}
+		if !ociref.IsValidDigest(digest.String()) {
 			return oci.Descriptor{}, fmt.Errorf("bad digest %q found in response", digest)
 		}
 	} else {
@@ -182,9 +185,10 @@ func descriptorFromResponse(resp *http.Response, knownDigest digest.Digest, requ
 }
 
 func newBlobReader(r io.ReadCloser, desc oci.Descriptor) *blobReader {
+	digester, _ := desc.Digest.Algorithm().New()
 	return &blobReader{
 		r:        r,
-		digester: desc.Digest.Algorithm().Hash(),
+		digester: digester,
 		desc:     desc,
 		verify:   true,
 	}
@@ -199,7 +203,7 @@ func newBlobReaderUnverified(r io.ReadCloser, desc oci.Descriptor) *blobReader {
 type blobReader struct {
 	r        io.ReadCloser
 	n        int64
-	digester hash.Hash
+	digester ocidigest.Digester
 	desc     oci.Descriptor
 	verify   bool
 }
@@ -211,7 +215,9 @@ func (r *blobReader) Descriptor() oci.Descriptor {
 func (r *blobReader) Read(buf []byte) (int, error) {
 	n, err := r.r.Read(buf)
 	r.n += int64(n)
-	r.digester.Write(buf[:n])
+	if _, writeErr := r.digester.Write(buf[:n]); writeErr != nil {
+		return n, writeErr
+	}
 	if err == nil {
 		if r.n > r.desc.Size {
 			// Fail early when the blob is too big; we can do that even
@@ -229,7 +235,10 @@ func (r *blobReader) Read(buf []byte) (int, error) {
 	if r.n != r.desc.Size {
 		return n, fmt.Errorf("blob size mismatch (%d/%d): %w", r.n, r.desc.Size, oci.ErrSizeInvalid)
 	}
-	gotDigest := digest.NewDigest(r.desc.Digest.Algorithm(), r.digester)
+	gotDigest, err := r.digester.Digest()
+	if err != nil {
+		return n, err
+	}
 	if gotDigest != r.desc.Digest {
 		return n, fmt.Errorf("digest mismatch when reading blob")
 	}
@@ -242,12 +251,12 @@ func (r *blobReader) Close() error {
 
 // TODO make this list configurable.
 var knownManifestMediaTypes = []string{
-	ocispec.MediaTypeImageManifest,
-	ocispec.MediaTypeImageIndex,
+	oci.MediaTypeImageManifest,
+	oci.MediaTypeImageIndex,
 	"application/vnd.oci.artifact.manifest.v1+json", // deprecated.
 	"application/vnd.docker.distribution.manifest.v1+json",
-	"application/vnd.docker.distribution.manifest.v2+json",
-	"application/vnd.docker.distribution.manifest.list.v2+json",
+	oci.MediaTypeDockerManifest,
+	oci.MediaTypeDockerManifestList,
 	// Technically this wildcard should be sufficient, but it isn't
 	// recognized by some registries.
 	"*/*",

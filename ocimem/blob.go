@@ -21,7 +21,7 @@ import (
 	"sync"
 
 	"github.com/docker/oci"
-	"github.com/opencontainers/go-digest"
+	"github.com/docker/oci/ocidigest"
 )
 
 // NewBytesReader returns an implementation of oci.BlobReader
@@ -181,7 +181,7 @@ func (b *Buffer) checkCommit(dig oci.Digest) (err error) {
 			b.commitErr = err
 		}
 	}()
-	if digest.FromBytes(b.buf) != dig {
+	if ocidigest.FromBytes(b.buf) != dig {
 		return fmt.Errorf("digest mismatch (sha256(%q) != %s): %w", b.buf, dig, oci.ErrDigestInvalid)
 	}
 	b.desc = oci.Descriptor{

@@ -22,9 +22,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/docker/oci/ocidigest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func mustParseDigest(s string) Digest {
+	digest, err := ocidigest.Parse(s)
+	if err != nil {
+		panic(err)
+	}
+	return digest
+}
 
 var parseReferenceTests = []struct {
 	testName string
@@ -92,7 +101,7 @@ var parseReferenceTests = []struct {
 		wantRef: Reference{
 			Host:       "test:5000",
 			Repository: "repo",
-			Digest:     "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			Digest:     mustParseDigest("sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 		},
 	},
 	{
@@ -101,7 +110,7 @@ var parseReferenceTests = []struct {
 			Host:       "test:5000",
 			Repository: "repo",
 			Tag:        "tag",
-			Digest:     "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			Digest:     mustParseDigest("sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 		},
 	},
 	{
@@ -126,11 +135,11 @@ var parseReferenceTests = []struct {
 	},
 	{
 		input:   "repo@sha256:ffffffffffffffffffffffffffffffffff",
-		wantErr: `invalid digest "sha256:ffffffffffffffffffffffffffffffffff": invalid checksum digest length`,
+		wantErr: `invalid digest "sha256:ffffffffffffffffffffffffffffffffff": ocidigest: encoded digest is invalid`,
 	},
 	{
 		input:   "validname@invalidDigest:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
-		wantErr: `invalid digest "invalidDigest:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff": invalid checksum digest format`,
+		wantErr: `invalid digest "invalidDigest:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff": ocidigest: invalid algorithm name`,
 	},
 	{
 		input:   "Uppercase:tag",
@@ -210,7 +219,7 @@ var parseReferenceTests = []struct {
 			Host:       "xn--7o8h.com",
 			Repository: "myimage",
 			Tag:        "xn--7o8h.com",
-			Digest:     "sha512:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			Digest:     mustParseDigest("sha512:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 		},
 	},
 	{
@@ -329,7 +338,7 @@ var parseReferenceTests = []struct {
 		wantRef: Reference{
 			Host:       "[2001:db8::1]:5000",
 			Repository: "repo",
-			Digest:     "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			Digest:     mustParseDigest("sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 		},
 	},
 	{
@@ -338,7 +347,7 @@ var parseReferenceTests = []struct {
 			Host:       "[2001:db8::1]:5000",
 			Repository: "repo",
 			Tag:        "tag",
-			Digest:     "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			Digest:     mustParseDigest("sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"),
 		},
 	},
 	{

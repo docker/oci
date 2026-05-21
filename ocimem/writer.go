@@ -21,8 +21,8 @@ import (
 	"slices"
 
 	"github.com/docker/oci"
+	"github.com/docker/oci/ocidigest"
 	"github.com/docker/oci/ociref"
-	"github.com/opencontainers/go-digest"
 )
 
 // This file implements the oci.Writer methods.
@@ -113,16 +113,23 @@ func (r *Registry) PushManifest(ctx context.Context, repoName string, data []byt
 		if err := params.Digest.Validate(); err != nil {
 			return oci.Descriptor{}, fmt.Errorf("invalid digest: %v: %w", err, oci.ErrDigestInvalid)
 		}
-		verifier := params.Digest.Verifier()
-		if _, err := verifier.Write(data); err != nil {
+		w, err := ocidigest.NewWriter(nil, params.Digest.Algorithm())
+		if err != nil {
+			return oci.Descriptor{}, fmt.Errorf("cannot make digest writer: %v", err)
+		}
+		if _, err := w.Write(data); err != nil {
 			return oci.Descriptor{}, fmt.Errorf("cannot verify digest: %v", err)
 		}
-		if !verifier.Verified() {
+		got, err := w.Digest()
+		if err != nil {
+			return oci.Descriptor{}, fmt.Errorf("cannot verify digest: %v", err)
+		}
+		if got != params.Digest {
 			return oci.Descriptor{}, fmt.Errorf("digest mismatch: %w", oci.ErrDigestInvalid)
 		}
 		dig = params.Digest
 	} else {
-		dig = digest.FromBytes(data)
+		dig = ocidigest.FromBytes(data)
 	}
 	desc := oci.Descriptor{
 		Digest:    dig,

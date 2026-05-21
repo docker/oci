@@ -18,12 +18,16 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/docker/oci"
 	"github.com/docker/oci/internal/ocirequest"
+	"github.com/docker/oci/ocidigest"
 )
 
 func (r *registry) handleBlobDelete(ctx context.Context, resp http.ResponseWriter, req *http.Request, rreq *ocirequest.Request) error {
-	if err := r.backend.DeleteBlob(ctx, rreq.Repo, oci.Digest(rreq.Digest)); err != nil {
+	digest, err := ocidigest.Parse(rreq.Digest)
+	if err != nil {
+		return err
+	}
+	if err := r.backend.DeleteBlob(ctx, rreq.Repo, digest); err != nil {
 		return err
 	}
 	resp.WriteHeader(http.StatusAccepted)
@@ -35,7 +39,11 @@ func (r *registry) handleManifestDelete(ctx context.Context, resp http.ResponseW
 	if rreq.Tag != "" {
 		err = r.backend.DeleteTag(ctx, rreq.Repo, rreq.Tag)
 	} else {
-		err = r.backend.DeleteManifest(ctx, rreq.Repo, oci.Digest(rreq.Digest))
+		digest, parseErr := ocidigest.Parse(rreq.Digest)
+		if parseErr != nil {
+			return parseErr
+		}
+		err = r.backend.DeleteManifest(ctx, rreq.Repo, digest)
 	}
 	if err != nil {
 		return err

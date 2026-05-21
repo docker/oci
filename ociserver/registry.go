@@ -28,15 +28,10 @@ import (
 
 	"github.com/docker/oci"
 	"github.com/docker/oci/internal/ocirequest"
-	ocispecroot "github.com/opencontainers/image-spec/specs-go"
 )
 
 // debug causes debug messages to be emitted when running the server.
 const debug = false
-
-var v2 = ocispecroot.Versioned{
-	SchemaVersion: 2,
-}
 
 // Options holds options for the server.
 type Options struct {
@@ -233,6 +228,6 @@ func (r *registry) setLocationHeader(resp http.ResponseWriter, isManifest bool, 
 		}
 	}
 	resp.Header().Set("Location", loc)
-	resp.Header().Set("Docker-Content-Digest", string(desc.Digest))
+	resp.Header().Set("Docker-Content-Digest", desc.Digest.String())
 	return nil
 }

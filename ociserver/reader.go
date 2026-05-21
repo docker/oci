@@ -22,15 +22,20 @@ import (
 
 	"github.com/docker/oci"
 	"github.com/docker/oci/internal/ocirequest"
+	"github.com/docker/oci/ocidigest"
 )
 
 func (r *registry) handleBlobHead(ctx context.Context, resp http.ResponseWriter, req *http.Request, rreq *ocirequest.Request) error {
-	desc, err := r.backend.ResolveBlob(ctx, rreq.Repo, oci.Digest(rreq.Digest))
+	digest, err := ocidigest.Parse(rreq.Digest)
+	if err != nil {
+		return err
+	}
+	desc, err := r.backend.ResolveBlob(ctx, rreq.Repo, digest)
 	if err != nil {
 		return err
 	}
 	resp.Header().Set("Content-Length", fmt.Sprint(desc.Size))
-	resp.Header().Set("Docker-Content-Digest", string(desc.Digest))
+	resp.Header().Set("Docker-Content-Digest", desc.Digest.String())
 	// TODO this is true in theory, but what if the backend doesn't support GetBlobRange ?
 	resp.Header().Set("Accept-Ranges", "bytes")
 	resp.WriteHeader(http.StatusOK)
@@ -43,7 +48,11 @@ func (r *registry) handleBlobGet(ctx context.Context, resp http.ResponseWriter, 
 		// what to pass back, so resolve the blob first so we don't
 		// stimulate the backend to start sending the whole stream
 		// only to abandon it.
-		desc, err := r.backend.ResolveBlob(ctx, rreq.Repo, oci.Digest(rreq.Digest))
+		digest, err := ocidigest.Parse(rreq.Digest)
+		if err != nil {
+			return err
+		}
+		desc, err := r.backend.ResolveBlob(ctx, rreq.Repo, digest)
 		if err != nil {
 			// TODO this might not be the best response because ResolveBlob is
 			// often implemented with a HEAD request that can't return an error
@@ -68,7 +77,11 @@ func (r *registry) handleBlobGet(ctx context.Context, resp http.ResponseWriter, 
 	}
 	switch len(ranges) {
 	case 0:
-		blob, err := r.backend.GetBlob(ctx, rreq.Repo, oci.Digest(rreq.Digest))
+		digest, err := ocidigest.Parse(rreq.Digest)
+		if err != nil {
+			return err
+		}
+		blob, err := r.backend.GetBlob(ctx, rreq.Repo, digest)
 		if err != nil {
 			return err
 		}
@@ -83,7 +96,11 @@ func (r *registry) handleBlobGet(ctx context.Context, resp http.ResponseWriter, 
 		return nil
 	case 1:
 		rng := ranges[0]
-		blob, err := r.backend.GetBlobRange(ctx, rreq.Repo, oci.Digest(rreq.Digest), rng.start, rng.end)
+		digest, err := ocidigest.Parse(rreq.Digest)
+		if err != nil {
+			return err
+		}
+		blob, err := r.backend.GetBlobRange(ctx, rreq.Repo, digest, rng.start, rng.end)
 		if err != nil {
 			// TODO fall back to using GetBlob if err is ErrUnsupported?
 			return err
@@ -120,14 +137,21 @@ func (r *registry) handleManifestGet(ctx context.Context, resp http.ResponseWrit
 	if rreq.Tag != "" {
 		mr, err = r.backend.GetTag(ctx, rreq.Repo, rreq.Tag)
 	} else {
-		mr, err = r.backend.GetManifest(ctx, rreq.Repo, oci.Digest(rreq.Digest))
+		digest, parseErr := ocidigest.Parse(rreq.Digest)
+		if parseErr != nil {
+			return parseErr
+		}
+		mr, err = r.backend.GetManifest(ctx, rreq.Repo, digest)
 	}
 	if err != nil {
 		return err
 	}
+	if mr == nil {
+		return fmt.Errorf("backend returned nil manifest reader")
+	}
 	desc := mr.Descriptor()
 	if !r.opts.OmitDigestFromTagGetResponse {
-		resp.Header().Set("Docker-Content-Digest", string(desc.Digest))
+		resp.Header().Set("Docker-Content-Digest", desc.Digest.String())
 	}
 	resp.Header().Set("Content-Type", desc.MediaType)
 	resp.Header().Set("Content-Length", fmt.Sprint(desc.Size))
@@ -142,7 +166,11 @@ func (r *registry) handleManifestHead(ctx context.Context, resp http.ResponseWri
 	if rreq.Tag != "" {
 		desc, err = r.backend.ResolveTag(ctx, rreq.Repo, rreq.Tag)
 	} else {
-		desc, err = r.backend.ResolveManifest(ctx, rreq.Repo, oci.Digest(rreq.Digest))
+		digest, parseErr := ocidigest.Parse(rreq.Digest)
+		if parseErr != nil {
+			return parseErr
+		}
+		desc, err = r.backend.ResolveManifest(ctx, rreq.Repo, digest)
 	}
 	if err != nil {
 		return err
@@ -152,7 +180,7 @@ func (r *registry) handleManifestHead(ctx context.Context, resp http.ResponseWri
 		// to expect that the digest header is set on the response
 		// even though the spec says it's only optional in this case.
 		// TODO raise an issue on the spec about this.
-		resp.Header().Set("Docker-Content-Digest", string(desc.Digest))
+		resp.Header().Set("Docker-Content-Digest", desc.Digest.String())
 	}
 	resp.Header().Set("Content-Type", desc.MediaType)
 	resp.Header().Set("Content-Length", fmt.Sprint(desc.Size))

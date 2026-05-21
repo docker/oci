@@ -21,12 +21,14 @@ import (
 	"testing"
 
 	"github.com/docker/oci"
-	"github.com/opencontainers/go-digest"
+	"github.com/docker/oci/ocidigest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/docker/oci/ocimem"
 )
+
+var testDigest = ocidigest.FromBytes([]byte("test"))
 
 func TestAccessCheckerErrorReturn(t *testing.T) {
 	ctx := context.Background()
@@ -59,13 +61,13 @@ func TestAccessCheckerAccessRequest(t *testing.T) {
 	assertAccess([]accessCheck{
 		{"foo/read", AccessRead},
 	}, func(ctx context.Context, r oci.Interface) error {
-		_, err := r.GetBlob(ctx, "foo/read", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		_, err := r.GetBlob(ctx, "foo/read", testDigest)
 		return err
 	})
 	assertAccess([]accessCheck{
 		{"foo/read", AccessRead},
 	}, func(ctx context.Context, r oci.Interface) error {
-		rd, err := r.GetBlobRange(ctx, "foo/read", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 100, 200)
+		rd, err := r.GetBlobRange(ctx, "foo/read", testDigest, 100, 200)
 		if rd != nil {
 			rd.Close()
 		}
@@ -75,7 +77,7 @@ func TestAccessCheckerAccessRequest(t *testing.T) {
 	assertAccess([]accessCheck{
 		{"foo/read", AccessRead},
 	}, func(ctx context.Context, r oci.Interface) error {
-		rd, err := r.GetManifest(ctx, "foo/read", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		rd, err := r.GetManifest(ctx, "foo/read", testDigest)
 		if rd != nil {
 			rd.Close()
 		}
@@ -95,14 +97,14 @@ func TestAccessCheckerAccessRequest(t *testing.T) {
 	assertAccess([]accessCheck{
 		{"foo/read", AccessRead},
 	}, func(ctx context.Context, r oci.Interface) error {
-		_, err := r.ResolveBlob(ctx, "foo/read", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		_, err := r.ResolveBlob(ctx, "foo/read", testDigest)
 		return err
 	})
 
 	assertAccess([]accessCheck{
 		{"foo/read", AccessRead},
 	}, func(ctx context.Context, r oci.Interface) error {
-		_, err := r.ResolveManifest(ctx, "foo/read", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		_, err := r.ResolveManifest(ctx, "foo/read", testDigest)
 		return err
 	})
 
@@ -118,7 +120,7 @@ func TestAccessCheckerAccessRequest(t *testing.T) {
 	}, func(ctx context.Context, r oci.Interface) error {
 		_, err := r.PushBlob(ctx, "foo/write", oci.Descriptor{
 			MediaType: "application/json",
-			Digest:    "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+			Digest:    testDigest,
 			Size:      3,
 		}, strings.NewReader("foo"))
 		return err
@@ -146,7 +148,7 @@ func TestAccessCheckerAccessRequest(t *testing.T) {
 		if _, err := w.Write(data); err != nil {
 			return err
 		}
-		_, err = w.Commit(digest.FromBytes(data))
+		_, err = w.Commit(ocidigest.FromBytes(data))
 		return err
 	})
 
@@ -154,7 +156,7 @@ func TestAccessCheckerAccessRequest(t *testing.T) {
 		{"foo/read", AccessRead},
 		{"foo/write", AccessWrite},
 	}, func(ctx context.Context, r oci.Interface) error {
-		_, err := r.MountBlob(ctx, "foo/read", "foo/write", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		_, err := r.MountBlob(ctx, "foo/read", "foo/write", testDigest)
 		return err
 	})
 
@@ -170,13 +172,13 @@ func TestAccessCheckerAccessRequest(t *testing.T) {
 	assertAccess([]accessCheck{
 		{"foo/write", AccessDelete},
 	}, func(ctx context.Context, r oci.Interface) error {
-		return r.DeleteBlob(ctx, "foo/write", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		return r.DeleteBlob(ctx, "foo/write", testDigest)
 	})
 
 	assertAccess([]accessCheck{
 		{"foo/write", AccessDelete},
 	}, func(ctx context.Context, r oci.Interface) error {
-		return r.DeleteManifest(ctx, "foo/write", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
+		return r.DeleteManifest(ctx, "foo/write", testDigest)
 	})
 
 	assertAccess([]accessCheck{
@@ -202,7 +204,7 @@ func TestAccessCheckerAccessRequest(t *testing.T) {
 	assertAccess([]accessCheck{
 		{"foo/read", AccessList},
 	}, func(ctx context.Context, r oci.Interface) error {
-		_, err := oci.All(r.Referrers(ctx, "foo/read", "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", nil))
+		_, err := oci.All(r.Referrers(ctx, "foo/read", testDigest, nil))
 		return err
 	})
 }

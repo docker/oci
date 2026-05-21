@@ -6,15 +6,36 @@ import (
 	"io"
 
 	"github.com/docker/oci"
-	"github.com/opencontainers/go-digest"
+	"github.com/docker/oci/ocidigest"
 )
 
+const defaultUploadChunkSize = 100 * 1024 * 1024 // 100 MB
+
+// UploadLargeBlobParameters holds optional parameters for UploadLargeBlob.
+type UploadLargeBlobParameters struct {
+	// ChunkSize is the maximum number of bytes to upload at a time.
+	// If zero or negative, a default of 100 MB is used.
+	ChunkSize int
+
+	// Algorithm is the digest algorithm used to commit the blob.
+	// If zero, ocidigest.Canonical is used.
+	Algorithm ocidigest.Algorithm
+}
+
 // UploadLargeBlob uploads a large blob in chunks with retries so that uploads can be resumed in case of network error
-func UploadLargeBlob(ctx context.Context, reg oci.Interface, repo string, f io.ReadCloser, chunkSize int) (oci.Descriptor, error) {
+func UploadLargeBlob(ctx context.Context, reg oci.Interface, repo string, f io.ReadCloser, params *UploadLargeBlobParameters) (oci.Descriptor, error) {
 	defer f.Close()
-	if chunkSize <= 0 {
-		chunkSize = 100 * 1024 * 1024 // 100 MB
+	chunkSize := defaultUploadChunkSize
+	algorithm := ocidigest.Canonical
+	if params != nil {
+		if params.ChunkSize > 0 {
+			chunkSize = params.ChunkSize
+		}
+		if params.Algorithm.String() != "" {
+			algorithm = params.Algorithm
+		}
 	}
+
 	bw, err := reg.PushBlobChunked(ctx, repo, chunkSize)
 	if err != nil {
 		return oci.Descriptor{}, fmt.Errorf("starting chunked upload: %w", err)
@@ -22,11 +43,16 @@ func UploadLargeBlob(ctx context.Context, reg oci.Interface, repo string, f io.R
 	defer func() { _ = bw.Cancel() }() // no-op after a successful Commit
 
 	buf := make([]byte, chunkSize)
-	dgstr := digest.Canonical.Digester()
+	dgstr, err := algorithm.New()
+	if err != nil {
+		return oci.Descriptor{}, err
+	}
 	for {
 		n, readErr := io.ReadFull(f, buf)
 		if n > 0 {
-			dgstr.Hash().Write(buf[:n])
+			if _, err := dgstr.Write(buf[:n]); err != nil {
+				return oci.Descriptor{}, err
+			}
 
 			var writeErr error
 			for range 3 { // try writing each chunk three times
@@ -50,5 +76,9 @@ func UploadLargeBlob(ctx context.Context, reg oci.Interface, repo string, f io.R
 			return oci.Descriptor{}, fmt.Errorf("reading source: %w", readErr)
 		}
 	}
-	return bw.Commit(dgstr.Digest())
+	dgst, err := dgstr.Digest()
+	if err != nil {
+		return oci.Descriptor{}, err
+	}
+	return bw.Commit(dgst)
 }

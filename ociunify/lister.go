@@ -54,7 +54,7 @@ func (u unifier) Referrers(ctx context.Context, repo string, digest oci.Digest, 
 }
 
 func compareDescriptor(d0, d1 oci.Descriptor) int {
-	return strings.Compare(string(d0.Digest), string(d1.Digest))
+	return strings.Compare(d0.Digest.String(), d1.Digest.String())
 }
 
 func mergeIter[T any](it0, it1 iter.Seq2[T, error], cmp func(T, T) int) iter.Seq2[T, error] {

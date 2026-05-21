@@ -26,7 +26,6 @@ import (
 	"strings"
 
 	"github.com/docker/oci"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"github.com/docker/oci/internal/ocirequest"
 )
@@ -86,7 +85,7 @@ func (c *client) Referrers(ctx context.Context, repoName string, digest oci.Dige
 	return pager(ctx, c, &ocirequest.Request{
 		Kind:         ocirequest.ReqReferrersList,
 		Repo:         repoName,
-		Digest:       string(digest),
+		Digest:       digest.String(),
 		ListN:        -1,
 		ArtifactType: artifactType,
 	}, false, func(resp *http.Response) ([]oci.Descriptor, error) {
@@ -114,9 +113,15 @@ func (c *client) Referrers(ctx context.Context, repoName string, digest oci.Dige
 		if err != nil {
 			return nil, err
 		}
-		var referrersResponse ocispec.Index
+		var referrersResponse oci.IndexOrManifest
 		if err := json.Unmarshal(data, &referrersResponse); err != nil {
 			return nil, fmt.Errorf("cannot unmarshal referrers response: %v", err)
+		}
+		if referrersResponse.MediaType == "" {
+			referrersResponse.MediaType = oci.MediaTypeImageIndex
+		}
+		if err := referrersResponse.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid referrers response: %v", err)
 		}
 		if artifactType == "" || resp.Header.Get("OCI-Filters-Applied") == "artifactType" {
 			return referrersResponse.Manifests, nil

@@ -29,7 +29,7 @@ import (
 	"testing"
 
 	"github.com/docker/oci"
-	"github.com/opencontainers/go-digest"
+	"github.com/docker/oci/ocidigest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -65,7 +65,7 @@ type RegistryContent map[string]RepoContent
 type RepoContent struct {
 	// Manifests maps from manifest identifier to the contents of the manifest.
 	// TODO support manifest indexes too.
-	Manifests map[string]oci.Manifest
+	Manifests map[string]oci.IndexOrManifest
 
 	// Blobs maps from blob identifer to the contents of the blob.
 	Blobs map[string]string
@@ -88,6 +88,12 @@ type PushedRepoContent struct {
 	// Blobs holds an entry for each blob identifier
 	// with the descriptor for that manifest.
 	Blobs map[string]oci.Descriptor
+}
+
+// DigestRef returns a deterministic digest used as a symbolic content
+// reference in RepoContent manifests before PushContent resolves descriptors.
+func DigestRef(id string) oci.Digest {
+	return ocidigest.FromBytes([]byte("ocitest-ref:" + id))
 }
 
 // PushContent pushes all the content in rc to r.
@@ -117,12 +123,17 @@ func PushRepoContent(r oci.Interface, repo string, repoc RepoContent) (PushedRep
 
 	for id, blob := range repoc.Blobs {
 		prc.Blobs[id] = oci.Descriptor{
-			Digest:    digest.FromString(blob),
+			Digest:    ocidigest.FromBytes([]byte(blob)),
 			Size:      int64(len(blob)),
 			MediaType: "application/binary",
 		}
 	}
-	manifests, manifestSeq, err := completedManifests(repoc, prc.Blobs)
+	blobRefs := make(map[string]oci.Descriptor)
+	for id, desc := range prc.Blobs {
+		blobRefs[id] = desc
+		blobRefs[DigestRef(id).String()] = desc
+	}
+	manifests, manifestSeq, err := completedManifests(repoc, blobRefs)
 	if err != nil {
 		return PushedRepoContent{}, err
 	}
@@ -181,6 +192,7 @@ type manifestContent struct {
 // for pushing to a registry in bottom-up order.
 func completedManifests(repoc RepoContent, blobs map[string]oci.Descriptor) (map[string]manifestContent, []manifestContent, error) {
 	manifests := make(map[string]manifestContent)
+	manifestRefs := make(map[string]manifestContent)
 	manifestSeq := make([]manifestContent, 0, len(repoc.Manifests))
 	// subject relationships can be arbitrarily deep, so continue iterating until
 	// all the levels are completed. If at any point we can't make progress, we
@@ -191,8 +203,8 @@ func completedManifests(repoc RepoContent, blobs map[string]oci.Descriptor) (map
 		needMore := false
 		need := func(digest oci.Digest) {
 			needMore = true
-			if !required[string(digest)] {
-				required[string(digest)] = true
+			if !required[digest.String()] {
+				required[digest.String()] = true
 				madeProgress = true
 			}
 		}
@@ -202,7 +214,10 @@ func completedManifests(repoc RepoContent, blobs map[string]oci.Descriptor) (map
 			}
 			m1 := m
 			if m1.Subject != nil {
-				mc, ok := manifests[string(m1.Subject.Digest)]
+				mc, ok := manifests[m1.Subject.Digest.String()]
+				if !ok {
+					mc, ok = manifestRefs[m1.Subject.Digest.String()]
+				}
 				if !ok {
 					need(m1.Subject.Digest)
 					continue
@@ -220,12 +235,13 @@ func completedManifests(repoc RepoContent, blobs map[string]oci.Descriptor) (map
 				id:   id,
 				data: data,
 				desc: oci.Descriptor{
-					Digest:    digest.FromBytes(data),
+					Digest:    ocidigest.FromBytes(data),
 					Size:      int64(len(data)),
 					MediaType: m.MediaType,
 				},
 			}
 			manifests[id] = mc
+			manifestRefs[DigestRef(id).String()] = mc
 			madeProgress = true
 			manifestSeq = append(manifestSeq, mc)
 		}
@@ -237,14 +253,20 @@ func completedManifests(repoc RepoContent, blobs map[string]oci.Descriptor) (map
 				if _, ok := manifests[m]; ok {
 					delete(required, m)
 				}
+				if _, ok := manifestRefs[m]; ok {
+					delete(required, m)
+				}
 			}
 			return nil, nil, fmt.Errorf("no manifest found for ids %s", strings.Join(mapKeys(required), ", "))
 		}
 	}
 }
 
-func fillManifestDescriptors(m oci.Manifest, blobs map[string]oci.Descriptor) oci.Manifest {
-	m.Config = fillBlobDescriptor(m.Config, blobs)
+func fillManifestDescriptors(m oci.IndexOrManifest, blobs map[string]oci.Descriptor) oci.IndexOrManifest {
+	if m.Config != nil {
+		config := fillBlobDescriptor(*m.Config, blobs)
+		m.Config = &config
+	}
 	m.Layers = slices.Clone(m.Layers)
 	for i, desc := range m.Layers {
 		m.Layers[i] = fillBlobDescriptor(desc, blobs)
@@ -253,7 +275,7 @@ func fillManifestDescriptors(m oci.Manifest, blobs map[string]oci.Descriptor) oc
 }
 
 func fillBlobDescriptor(d oci.Descriptor, blobs map[string]oci.Descriptor) oci.Descriptor {
-	blobDesc, ok := blobs[string(d.Digest)]
+	blobDesc, ok := blobs[d.Digest.String()]
 	if !ok {
 		panic(fmt.Errorf("no blob found with id %q", d.Digest))
 	}
@@ -268,7 +290,7 @@ func fillBlobDescriptor(d oci.Descriptor, blobs map[string]oci.Descriptor) oci.D
 // MustPushBlob pushes a blob to the given repository and fails the test if it encounters an error.
 func (r Registry) MustPushBlob(repo string, data []byte) oci.Descriptor {
 	desc := oci.Descriptor{
-		Digest:    digest.FromBytes(data),
+		Digest:    ocidigest.FromBytes(data),
 		Size:      int64(len(data)),
 		MediaType: "application/octet-stream",
 	}
@@ -289,7 +311,7 @@ func (r Registry) MustPushManifest(repo string, jsonObject any, tag string) ([]b
 	require.NoError(r.T, err)
 	require.NotEmpty(r.T, mt.MediaType)
 	desc := oci.Descriptor{
-		Digest:    digest.FromBytes(data),
+		Digest:    ocidigest.FromBytes(data),
 		Size:      int64(len(data)),
 		MediaType: mt.MediaType,
 	}
@@ -327,7 +349,7 @@ func AssertBlobContent(t *testing.T, r oci.BlobReader, wantData []byte, wantMedi
 	gotData, err := io.ReadAll(r)
 	require.NoError(t, err, "error reading data")
 	require.Equal(t, int64(len(wantData)), desc.Size, "mismatched content length")
-	require.Equal(t, digest.FromBytes(wantData), desc.Digest, "mismatched digest")
+	require.Equal(t, ocidigest.FromBytes(wantData), desc.Digest, "mismatched digest")
 	require.Equal(t, wantData, gotData, "mismatched content")
 	require.Equal(t, wantMediaType, desc.MediaType, "media type mismatch")
 }

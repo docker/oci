@@ -26,7 +26,7 @@ func (c *client) DeleteBlob(ctx context.Context, repoName string, digest oci.Dig
 	return c.delete(ctx, &ocirequest.Request{
 		Kind:   ocirequest.ReqBlobDelete,
 		Repo:   repoName,
-		Digest: string(digest),
+		Digest: digest.String(),
 	})
 }
 
@@ -34,7 +34,7 @@ func (c *client) DeleteManifest(ctx context.Context, repoName string, digest oci
 	return c.delete(ctx, &ocirequest.Request{
 		Kind:   ocirequest.ReqManifestDelete,
 		Repo:   repoName,
-		Digest: string(digest),
+		Digest: digest.String(),
 	})
 }
 
