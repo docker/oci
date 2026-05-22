@@ -30,6 +30,13 @@ import (
 // bytes. Hence, 8 KiB should be sufficient.
 const errorBodySizeLimit = 8 * 1024
 
+// ErrorFromResponse forms an OCI error from an HTTP response.
+//
+// It reads but does not close resp.Body.
+func ErrorFromResponse(resp *http.Response) error {
+	return makeError(resp)
+}
+
 // makeError forms an error from a non-OK response.
 //
 // It reads but does not close resp.Body.

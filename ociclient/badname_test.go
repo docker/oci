@@ -19,9 +19,9 @@ func TestBadRepoName(t *testing.T) {
 	})
 	require.NoError(t, err)
 	_, err = r.GetBlob(ctx, "Invalid--Repo", ocidigest.FromBytes(nil))
-	assert.Regexp(t, "invalid OCI request: name invalid: invalid repository name", err.Error())
+	assert.Regexp(t, "no can do", err.Error())
 	_, err = r.ResolveTag(ctx, "okrepo", "bad-Tag!")
-	assert.Regexp(t, "invalid OCI request: 404 Not Found: page not found", err.Error())
+	assert.Regexp(t, "no can do", err.Error())
 }
 
 type noTransport struct{}

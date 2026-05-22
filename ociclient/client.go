@@ -31,7 +31,6 @@ import (
 
 	"github.com/docker/oci"
 
-	"github.com/docker/oci/internal/ocirequest"
 	"github.com/docker/oci/ociauth"
 	"github.com/docker/oci/ocidigest"
 	"github.com/docker/oci/ociref"
@@ -66,13 +65,12 @@ type Options struct {
 
 var debugID int32
 
-// New returns a registry implementation that uses the OCI
-// HTTP API. A nil opts parameter is equivalent to a pointer
-// to zero Options.
+// New returns a client implementation that uses the OCI HTTP API. A nil opts
+// parameter is equivalent to a pointer to zero Options.
 //
 // The host specifies the host name to talk to; it may
 // optionally be a host:port pair.
-func New(host string, opts0 *Options) (oci.Interface, error) {
+func New(host string, opts0 *Options) (*Client, error) {
 	var opts Options
 	if opts0 != nil {
 		opts = *opts0
@@ -100,7 +98,7 @@ func New(host string, opts0 *Options) (oci.Interface, error) {
 	if opts.Insecure {
 		u.Scheme = "http"
 	}
-	return &client{
+	return &Client{
 		httpHost:   host,
 		httpScheme: u.Scheme,
 		httpClient: &http.Client{
@@ -111,7 +109,9 @@ func New(host string, opts0 *Options) (oci.Interface, error) {
 	}, nil
 }
 
-type client struct {
+// Client is an OCI registry client that uses HTTP to talk to the remote
+// registry.
+type Client struct {
 	*oci.Funcs
 	httpScheme   string
 	httpHost     string
@@ -119,6 +119,16 @@ type client struct {
 	userAgent    string
 	debugID      string
 	listPageSize int
+}
+
+var _ oci.Interface = (*Client)(nil)
+
+// RequestOptions holds options for [Client.Do].
+type RequestOptions struct {
+	// Scope is the authorization scope required by the request. It is attached
+	// to the request context for use by transports created by
+	// [ociauth.NewStdTransport].
+	Scope ociauth.Scope
 }
 
 type descriptorRequired byte
@@ -262,30 +272,16 @@ var knownManifestMediaTypes = []string{
 	"*/*",
 }
 
-// doRequest performs the given OCI request, sending it with the given body (which may be nil).
-func (c *client) doRequest(ctx context.Context, rreq *ocirequest.Request, okStatuses ...int) (*http.Response, error) {
-	req, err := newRequest(ctx, rreq, nil)
-	if err != nil {
-		return nil, err
-	}
-	if rreq.Kind == ocirequest.ReqManifestGet || rreq.Kind == ocirequest.ReqManifestHead {
-		// When getting manifests, some servers won't return
-		// the content unless there's an Accept header, so
-		// add all the manifest kinds that we know about.
-		req.Header["Accept"] = knownManifestMediaTypes
-	}
-	resp, err := c.do(req, okStatuses...)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode/100 == 2 {
-		return resp, nil
-	}
-	defer resp.Body.Close()
-	return nil, makeError(resp)
-}
-
-func (c *client) do(req *http.Request, okStatuses ...int) (*http.Response, error) {
+// Do performs an HTTP request against the registry.
+//
+// If req.URL has no scheme or host, Do fills them in from the client's
+// configured registry. It also sets the User-Agent header and, when the request
+// has a body, sets Expect: 100-continue.
+//
+// Do does not interpret HTTP response statuses. Callers that want OCI error
+// handling can use [CheckResponse] or [ErrorFromResponse]. On a nil error, the
+// caller is responsible for closing resp.Body.
+func (c *Client) Do(req *http.Request, opts *RequestOptions) (*http.Response, error) {
 	if req.URL.Scheme == "" {
 		req.URL.Scheme = c.httpScheme
 	}
@@ -293,6 +289,11 @@ func (c *client) do(req *http.Request, okStatuses ...int) (*http.Response, error
 		req.URL.Host = c.httpHost
 	}
 	req.Header.Set("User-Agent", c.userAgent)
+	if opts != nil {
+		req = req.WithContext(ociauth.ContextWithRequestInfo(req.Context(), ociauth.RequestInfo{
+			RequiredScope: opts.Scope,
+		}))
+	}
 
 	if req.Body != nil {
 		// Ensure that the body isn't consumed until the
@@ -304,7 +305,7 @@ func (c *client) do(req *http.Request, okStatuses ...int) (*http.Response, error
 	}
 	var buf bytes.Buffer
 	if debug {
-		fmt.Fprintf(&buf, "client.Do: %s %s {{\n", req.Method, req.URL)
+		fmt.Fprintf(&buf, "Client.Do: %s %s {{\n", req.Method, req.URL)
 		fmt.Fprintf(&buf, "\tBODY: %#v\n", req.Body)
 		for k, v := range req.Header {
 			fmt.Fprintf(&buf, "\t%s: %q\n", k, v)
@@ -330,20 +331,43 @@ func (c *client) do(req *http.Request, okStatuses ...int) (*http.Response, error
 		resp.Body = io.NopCloser(bytes.NewReader(data))
 		c.logf("%s", buf.Bytes())
 	}
-	if len(okStatuses) == 0 && resp.StatusCode == http.StatusOK {
-		return resp, nil
-	}
-	if slices.Contains(okStatuses, resp.StatusCode) {
-		return resp, nil
-	}
-	defer resp.Body.Close()
-	if !isOKStatus(resp.StatusCode) {
-		return nil, makeError(resp)
-	}
-	return nil, unexpectedStatusError(resp.StatusCode)
+	return resp, nil
 }
 
-func (c *client) logf(f string, a ...any) {
+// CheckResponse checks that resp has an acceptable status.
+//
+// If okStatuses is empty, any 2xx response is accepted. Otherwise, only the
+// supplied statuses are accepted. Non-2xx responses are returned as OCI errors.
+// CheckResponse reads but does not close resp.Body when constructing an error.
+func CheckResponse(resp *http.Response, okStatuses ...int) error {
+	if len(okStatuses) == 0 {
+		if isOKStatus(resp.StatusCode) {
+			return nil
+		}
+		return ErrorFromResponse(resp)
+	}
+	if slices.Contains(okStatuses, resp.StatusCode) {
+		return nil
+	}
+	if !isOKStatus(resp.StatusCode) {
+		return ErrorFromResponse(resp)
+	}
+	return unexpectedStatusError(resp.StatusCode)
+}
+
+func (c *Client) do(req *http.Request, okStatuses ...int) (*http.Response, error) {
+	resp, err := c.Do(req, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := CheckResponse(resp, okStatuses...); err != nil {
+		resp.Body.Close()
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (c *Client) logf(f string, a ...any) {
 	log.Printf("ociclient %s: %s", c.debugID, fmt.Sprintf(f, a...))
 }
 
@@ -373,58 +397,70 @@ func unexpectedStatusError(code int) error {
 	return fmt.Errorf("unexpected HTTP response code %d", code)
 }
 
-func scopeForRequest(r *ocirequest.Request) ociauth.Scope {
-	switch r.Kind {
-	case ocirequest.ReqPing:
-		return ociauth.Scope{}
-	case ocirequest.ReqBlobGet,
-		ocirequest.ReqBlobHead,
-		ocirequest.ReqManifestGet,
-		ocirequest.ReqManifestHead,
-		ocirequest.ReqTagsList,
-		ocirequest.ReqReferrersList:
-		return ociauth.NewScope(ociauth.ResourceScope{
-			ResourceType: ociauth.TypeRepository,
-			Resource:     r.Repo,
-			Action:       ociauth.ActionPull,
-		})
-	case ocirequest.ReqBlobDelete,
-		ocirequest.ReqBlobStartUpload,
-		ocirequest.ReqBlobUploadBlob,
-		ocirequest.ReqBlobUploadInfo,
-		ocirequest.ReqBlobUploadChunk,
-		ocirequest.ReqBlobCompleteUpload,
-		ocirequest.ReqManifestPut,
-		ocirequest.ReqManifestDelete:
-		return ociauth.NewScope(ociauth.ResourceScope{
-			ResourceType: ociauth.TypeRepository,
-			Resource:     r.Repo,
-			Action:       ociauth.ActionPush,
-		})
-	case ocirequest.ReqBlobMount:
-		return ociauth.NewScope(ociauth.ResourceScope{
-			ResourceType: ociauth.TypeRepository,
-			Resource:     r.Repo,
-			Action:       ociauth.ActionPush,
-		}, ociauth.ResourceScope{
-			ResourceType: ociauth.TypeRepository,
-			Resource:     r.FromRepo,
-			Action:       ociauth.ActionPull,
-		})
-	case ocirequest.ReqCatalogList:
-		return ociauth.NewScope(ociauth.CatalogScope)
-	default:
-		panic(fmt.Errorf("unexpected request kind %v", r.Kind))
-	}
+func newRequest(ctx context.Context, method string, u string, body io.Reader, scope ociauth.Scope) (*http.Request, error) {
+	ctx = ociauth.ContextWithRequestInfo(ctx, ociauth.RequestInfo{
+		RequiredScope: scope,
+	})
+	return http.NewRequestWithContext(ctx, method, u, body)
 }
 
-func newRequest(ctx context.Context, rreq *ocirequest.Request, body io.Reader) (*http.Request, error) {
-	method, u, err := rreq.Construct()
+func newManifestRequest(ctx context.Context, method string, repo string, tagOrDigest string, scope ociauth.Scope) (*http.Request, error) {
+	req, err := newRequest(ctx, method, manifestURL(repo, tagOrDigest), nil, scope)
 	if err != nil {
 		return nil, err
 	}
-	ctx = ociauth.ContextWithRequestInfo(ctx, ociauth.RequestInfo{
-		RequiredScope: scopeForRequest(rreq),
+	// When getting manifests, some servers won't return the content unless
+	// there's an Accept header, so add all manifest kinds that we know about.
+	if method == http.MethodGet || method == http.MethodHead {
+		req.Header["Accept"] = knownManifestMediaTypes
+	}
+	return req, nil
+}
+
+func pullScope(repo string) ociauth.Scope {
+	return ociauth.NewScope(ociauth.ResourceScope{
+		ResourceType: ociauth.TypeRepository,
+		Resource:     repo,
+		Action:       ociauth.ActionPull,
 	})
-	return http.NewRequestWithContext(ctx, method, u, body)
+}
+
+func pushScope(repo string) ociauth.Scope {
+	return ociauth.NewScope(ociauth.ResourceScope{
+		ResourceType: ociauth.TypeRepository,
+		Resource:     repo,
+		Action:       ociauth.ActionPull,
+	}, ociauth.ResourceScope{
+		ResourceType: ociauth.TypeRepository,
+		Resource:     repo,
+		Action:       ociauth.ActionPush,
+	})
+}
+
+func deleteScope(repo string) ociauth.Scope {
+	return ociauth.NewScope(ociauth.ResourceScope{
+		ResourceType: ociauth.TypeRepository,
+		Resource:     repo,
+		Action:       ociauth.ActionDelete,
+	})
+}
+
+func mountScope(fromRepo, toRepo string) ociauth.Scope {
+	return ociauth.NewScope(ociauth.ResourceScope{
+		ResourceType: ociauth.TypeRepository,
+		Resource:     toRepo,
+		Action:       ociauth.ActionPull,
+	}, ociauth.ResourceScope{
+		ResourceType: ociauth.TypeRepository,
+		Resource:     toRepo,
+		Action:       ociauth.ActionPush,
+	}, ociauth.ResourceScope{
+		ResourceType: ociauth.TypeRepository,
+		Resource:     fromRepo,
+		Action:       ociauth.ActionPull,
+	})
+}
+
+func catalogScope() ociauth.Scope {
+	return ociauth.NewScope(ociauth.CatalogScope)
 }

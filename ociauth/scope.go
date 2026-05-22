@@ -13,6 +13,7 @@ type knownAction byte
 const (
 	unknownAction knownAction = iota
 	// Note: ordered by lexical string representation.
+	deleteAction
 	pullAction
 	pushAction
 	numActions
@@ -24,6 +25,8 @@ const (
 	// TypeRegistry is the resource type for registry-wide operations.
 	TypeRegistry = "registry"
 
+	// ActionDelete is the action for deleting content from a repository.
+	ActionDelete = "delete"
 	// ActionPull is the action for pulling content from a repository.
 	ActionPull = "pull"
 	// ActionPush is the action for pushing content to a repository.
@@ -32,6 +35,8 @@ const (
 
 func (a knownAction) String() string {
 	switch a {
+	case deleteAction:
+		return ActionDelete
 	case pullAction:
 		return ActionPull
 	case pushAction:
@@ -65,7 +70,7 @@ type ResourceScope struct {
 	Resource string
 
 	// Action names an action that can be performed on the resource.
-	// This is usually ActionPush or ActionPull.
+	// This is usually ActionPull, ActionPush or ActionDelete.
 	Action string
 }
 
@@ -487,6 +492,8 @@ func (s Scope) String() string {
 
 func parseKnownAction(s string) knownAction {
 	switch s {
+	case ActionDelete:
+		return deleteAction
 	case ActionPull:
 		return pullAction
 	case ActionPush:
