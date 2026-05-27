@@ -100,9 +100,9 @@ func TestBearerAuth(t *testing.T) {
 	assertRequest(context.Background(), t, ts, "/test", client, Scope{})
 }
 
-func TestBearerAuthAdditionalScope(t *testing.T) {
-	// This tests the scenario where there's a larger scope in the context
-	// than the required scope.
+func TestBearerAuthAdditionalScopeDoesNotOverrideChallenge(t *testing.T) {
+	// This tests that additional context scope is not unioned into the
+	// registry-provided challenge scope.
 	requiredScope := ParseScope("repository:foo:push,pull")
 	additionalScope := ParseScope("repository:bar:pull somethingElse")
 	authSrv := newAuthServer(t, func(req *http.Request) (any, *httpError) {
@@ -114,8 +114,7 @@ func TestBearerAuthAdditionalScope(t *testing.T) {
 		}
 		requestedScope := ParseScope(strings.Join(req.Form["scope"], " "))
 		runNonFatal(t, func(t testing.TB) {
-			wantScope := requiredScope.Union(additionalScope)
-			require.True(t, wantScope.Equal(requestedScope), "scope mismatch: got %v, want %v", requestedScope, wantScope)
+			require.True(t, requiredScope.Equal(requestedScope), "scope mismatch: got %v, want %v", requestedScope, requiredScope)
 			require.Equal(t, []string{"someService"}, req.Form["service"])
 		})
 		return &wireToken{
@@ -132,8 +131,7 @@ func TestBearerAuthAdditionalScope(t *testing.T) {
 			}
 		}
 		runNonFatal(t, func(t testing.TB) {
-			wantScope := requiredScope.Union(additionalScope)
-			require.True(t, wantScope.Equal(authScopeFromRequest(t, req)), "scope mismatch")
+			require.True(t, requiredScope.Equal(authScopeFromRequest(t, req)), "scope mismatch")
 		})
 		return nil
 	})
@@ -418,10 +416,14 @@ func TestLaterRequestCanUseEarlierTokenWithLargerScope(t *testing.T) {
 			Action:       ActionPull,
 		})
 		if req.Header.Get("Authorization") == "" {
+			challengeScope := requiredScope
+			if resource == "foo1" {
+				challengeScope = ParseScope("repository:foo1:pull repository:foo2:pull")
+			}
 			return &httpError{
 				statusCode: http.StatusUnauthorized,
 				header: http.Header{
-					"Www-Authenticate": []string{fmt.Sprintf("Bearer realm=%q,service=someService,scope=%q", authSrv, requiredScope)},
+					"Www-Authenticate": []string{fmt.Sprintf("Bearer realm=%q,service=someService,scope=%q", authSrv, challengeScope)},
 				},
 			}
 		}
@@ -438,15 +440,72 @@ func TestLaterRequestCanUseEarlierTokenWithLargerScope(t *testing.T) {
 			}),
 		}),
 	}
-	ctx := ContextWithScope(context.Background(), ParseScope("repository:foo1:pull repository:foo2:pull"))
-	assertRequest(ctx, t, ts, "/test/foo1", client, Scope{})
-	assertRequest(ctx, t, ts, "/test/foo2", client, Scope{})
+	assertRequest(context.Background(), t, ts, "/test/foo1", client, Scope{})
+	assertRequest(context.Background(), t, ts, "/test/foo2", client, Scope{})
 	// One token fetch should have been sufficient for both requests.
 	require.Equal(t, 1, authCount)
 }
 
+func TestLaterRequestCanAcquireTokenProactively(t *testing.T) {
+	authCount := 0
+	authSrv := newAuthServer(t, func(req *http.Request) (any, *httpError) {
+		authCount++
+		requestedScope := ParseScope(strings.Join(req.Form["scope"], " "))
+		return &wireToken{
+			Token: token{requestedScope}.String(),
+		}, nil
+	})
+	targetCount := 0
+	ts := newTargetServer(t, func(req *http.Request) *httpError {
+		targetCount++
+		resource := strings.TrimPrefix(req.URL.Path, "/test/")
+		requiredScope := NewScope(ResourceScope{
+			ResourceType: TypeRepository,
+			Resource:     resource,
+			Action:       ActionPull,
+		})
+		if req.Header.Get("Authorization") == "" {
+			return &httpError{
+				statusCode: http.StatusUnauthorized,
+				header: http.Header{
+					"Www-Authenticate": []string{fmt.Sprintf("Bearer realm=%q,service=someService,scope=%q", authSrv, requiredScope)},
+				},
+			}
+		}
+		runNonFatal(t, func(t testing.TB) {
+			requestScope := authScopeFromRequest(t, req)
+			require.True(t, requestScope.Contains(requiredScope), "request scope: %q; required scope: %q", requestScope, requiredScope)
+		})
+		return nil
+	})
+	client := &http.Client{
+		Transport: NewStdTransport(StdTransportParams{
+			Config: configFunc(func(host string) (ConfigEntry, error) {
+				if host == ts.Host {
+					return ConfigEntry{
+						RefreshToken: "someRefreshToken",
+					}, nil
+				}
+				return ConfigEntry{}, nil
+			}),
+		}),
+	}
+	assertRequest1(ContextWithRequestInfo(context.Background(), RequestInfo{
+		RequiredScope: ParseScope("repository:foo1:pull"),
+	}), t, ts, "/test/foo1", client)
+	require.Equal(t, 2, targetCount)
+	require.Equal(t, 1, authCount)
+
+	assertRequest1(ContextWithRequestInfo(context.Background(), RequestInfo{
+		RequiredScope: ParseScope("repository:foo2:pull"),
+	}), t, ts, "/test/foo2", client)
+	require.Equal(t, 3, targetCount)
+	require.Equal(t, 2, authCount)
+}
+
 func TestAuthServerRejectsRequestsWithTooMuchScope(t *testing.T) {
-	// This tests the scenario described in the comment in registry.acquireAccessToken.
+	// This verifies that caller-provided desired scope is not added to the
+	// registry-provided challenge scope.
 	userHasScope := ParseScope("repository:foo:pull")
 
 	authSrv := newAuthServer(t, func(req *http.Request) (any, *httpError) {

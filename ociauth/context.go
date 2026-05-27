@@ -7,10 +7,8 @@ import (
 type scopeKey struct{}
 
 // ContextWithScope returns ctx annotated with the given
-// scope. When the ociauth transport receives a request with a scope in the context,
-// it will treat it as "desired authorization scope"; new authorization tokens
-// will be acquired with that scope as well as any scope required by
-// the operation.
+// scope. The ociauth transport does not add this scope to a registry
+// challenge; challenges remain the source of truth for new token acquisition.
 func ContextWithScope(ctx context.Context, s Scope) context.Context {
 	return context.WithValue(ctx, scopeKey{}, s)
 }
@@ -29,18 +27,18 @@ type requestInfoKey struct{}
 // request context. The [ociclient] package will add this to all
 // requests that is makes.
 type RequestInfo struct {
-	// RequiredScope holds the authorization scope that's required
-	// by the request. The ociauth logic will reuse any available
-	// auth token that has this scope. When acquiring a new token,
-	// it will add any scope found in [ScopeFromContext] too.
+	// RequiredScope holds the authorization scope that can satisfy
+	// the request for cached-token reuse. When the transport already
+	// knows the registry's bearer token realm and has a refresh token,
+	// it may use this scope to acquire a token proactively. A
+	// Www-Authenticate challenge remains authoritative when present.
 	RequiredScope Scope
 }
 
 // ContextWithRequestInfo returns ctx annotated with the given
 // request informaton. When ociclient receives a request with
 // this attached, it will respect info.RequiredScope to determine
-// what auth tokens to reuse. When it acquires a new token,
-// it will ask for the union of info.RequiredScope [ScopeFromContext].
+// what auth tokens to reuse or proactively acquire.
 func ContextWithRequestInfo(ctx context.Context, info RequestInfo) context.Context {
 	return context.WithValue(ctx, requestInfoKey{}, info)
 }

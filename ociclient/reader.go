@@ -22,28 +22,24 @@ import (
 	"net/http"
 
 	"github.com/docker/oci"
-	"github.com/docker/oci/internal/ocirequest"
 	"github.com/docker/oci/ocidigest"
 )
 
-func (c *client) GetBlob(ctx context.Context, repo string, digest oci.Digest) (oci.BlobReader, error) {
-	return c.read(ctx, &ocirequest.Request{
-		Kind:   ocirequest.ReqBlobGet,
-		Repo:   repo,
-		Digest: digest.String(),
-	})
+// GetBlob returns the content of the blob with the given digest.
+func (c *Client) GetBlob(ctx context.Context, repo string, digest oci.Digest) (oci.BlobReader, error) {
+	req, err := newRequest(ctx, http.MethodGet, blobURL(repo, digest), nil, pullScope(repo))
+	if err != nil {
+		return nil, err
+	}
+	return c.read(req, digest, false)
 }
 
-func (c *client) GetBlobRange(ctx context.Context, repo string, digest oci.Digest, o0, o1 int64) (_ oci.BlobReader, _err error) {
+// GetBlobRange is like GetBlob but asks for only the given byte range.
+func (c *Client) GetBlobRange(ctx context.Context, repo string, digest oci.Digest, o0, o1 int64) (_ oci.BlobReader, _err error) {
 	if o0 == 0 && o1 < 0 {
 		return c.GetBlob(ctx, repo, digest)
 	}
-	rreq := &ocirequest.Request{
-		Kind:   ocirequest.ReqBlobGet,
-		Repo:   repo,
-		Digest: digest.String(),
-	}
-	req, err := newRequest(ctx, rreq, nil)
+	req, err := newRequest(ctx, http.MethodGet, blobURL(repo, digest), nil, pullScope(repo))
 	if err != nil {
 		return nil, err
 	}
@@ -60,45 +56,46 @@ func (c *client) GetBlobRange(ctx context.Context, repo string, digest oci.Diges
 	// Fix that either by returning ErrUnsupported or by reading the whole
 	// blob and returning only the required portion.
 	defer closeOnError(&_err, resp.Body)
-	knownDigest, _ := ocidigest.Parse(rreq.Digest)
-	desc, err := descriptorFromResponse(resp, knownDigest, requireSize)
+	desc, err := descriptorFromResponse(resp, digest, requireSize)
 	if err != nil {
 		return nil, fmt.Errorf("invalid descriptor in response: %v", err)
 	}
 	return newBlobReaderUnverified(resp.Body, desc), nil
 }
 
-func (c *client) ResolveBlob(ctx context.Context, repo string, digest oci.Digest) (oci.Descriptor, error) {
-	return c.resolve(ctx, &ocirequest.Request{
-		Kind:   ocirequest.ReqBlobHead,
-		Repo:   repo,
-		Digest: digest.String(),
-	})
+// ResolveBlob returns the descriptor for the blob with the given digest.
+func (c *Client) ResolveBlob(ctx context.Context, repo string, digest oci.Digest) (oci.Descriptor, error) {
+	req, err := newRequest(ctx, http.MethodHead, blobURL(repo, digest), nil, pullScope(repo))
+	if err != nil {
+		return oci.Descriptor{}, err
+	}
+	return c.resolve(req, digest)
 }
 
-func (c *client) ResolveManifest(ctx context.Context, repo string, digest oci.Digest) (oci.Descriptor, error) {
-	return c.resolve(ctx, &ocirequest.Request{
-		Kind:   ocirequest.ReqManifestHead,
-		Repo:   repo,
-		Digest: digest.String(),
-	})
+// ResolveManifest returns the descriptor for the manifest with the given digest.
+func (c *Client) ResolveManifest(ctx context.Context, repo string, digest oci.Digest) (oci.Descriptor, error) {
+	req, err := newManifestRequest(ctx, http.MethodHead, repo, digest.String(), pullScope(repo))
+	if err != nil {
+		return oci.Descriptor{}, err
+	}
+	return c.resolve(req, digest)
 }
 
-func (c *client) ResolveTag(ctx context.Context, repo string, tag string) (oci.Descriptor, error) {
-	return c.resolve(ctx, &ocirequest.Request{
-		Kind: ocirequest.ReqManifestHead,
-		Repo: repo,
-		Tag:  tag,
-	})
+// ResolveTag returns the descriptor for the manifest with the given tag.
+func (c *Client) ResolveTag(ctx context.Context, repo string, tag string) (oci.Descriptor, error) {
+	req, err := newManifestRequest(ctx, http.MethodHead, repo, tag, pullScope(repo))
+	if err != nil {
+		return oci.Descriptor{}, err
+	}
+	return c.resolve(req, "")
 }
 
-func (c *client) resolve(ctx context.Context, rreq *ocirequest.Request) (oci.Descriptor, error) {
-	resp, err := c.doRequest(ctx, rreq)
+func (c *Client) resolve(req *http.Request, knownDigest oci.Digest) (oci.Descriptor, error) {
+	resp, err := c.do(req)
 	if err != nil {
 		return oci.Descriptor{}, err
 	}
 	resp.Body.Close()
-	knownDigest, _ := ocidigest.Parse(rreq.Digest)
 	desc, err := descriptorFromResponse(resp, knownDigest, requireSize|requireDigest)
 	if err != nil {
 		return oci.Descriptor{}, fmt.Errorf("invalid descriptor in response: %v", err)
@@ -106,41 +103,32 @@ func (c *client) resolve(ctx context.Context, rreq *ocirequest.Request) (oci.Des
 	return desc, nil
 }
 
-func (c *client) GetManifest(ctx context.Context, repo string, digest oci.Digest) (oci.BlobReader, error) {
-	return c.read(ctx, &ocirequest.Request{
-		Kind:   ocirequest.ReqManifestGet,
-		Repo:   repo,
-		Digest: digest.String(),
-	})
+// GetManifest returns the content of the manifest with the given digest.
+func (c *Client) GetManifest(ctx context.Context, repo string, digest oci.Digest) (oci.BlobReader, error) {
+	req, err := newManifestRequest(ctx, http.MethodGet, repo, digest.String(), pullScope(repo))
+	if err != nil {
+		return nil, err
+	}
+	return c.read(req, digest, true)
 }
 
-func (c *client) GetTag(ctx context.Context, repo string, tagName string) (oci.BlobReader, error) {
-	return c.read(ctx, &ocirequest.Request{
-		Kind: ocirequest.ReqManifestGet,
-		Repo: repo,
-		Tag:  tagName,
-	})
+// GetTag returns the content of the manifest with the given tag.
+func (c *Client) GetTag(ctx context.Context, repo string, tagName string) (oci.BlobReader, error) {
+	req, err := newManifestRequest(ctx, http.MethodGet, repo, tagName, pullScope(repo))
+	if err != nil {
+		return nil, err
+	}
+	return c.read(req, "", true)
 }
 
-// inMemThreshold holds the maximum number of bytes of manifest content
-// that we'll hold in memory to obtain a digest before falling back do
-// doing a HEAD request.
-//
-// This is hopefully large enough to be considerably larger than most
-// manifests but small enough to fit comfortably into RAM on most
-// platforms.
-//
-// Note: this is only used when talking to registries that fail to return
-// a digest when doing a GET on a tag.
-const inMemThreshold = 128 * 1024
+const maxManifestSize = 4 * 1024 * 1024
 
-func (c *client) read(ctx context.Context, rreq *ocirequest.Request) (_ oci.BlobReader, _err error) {
-	resp, err := c.doRequest(ctx, rreq)
+func (c *Client) read(req *http.Request, knownDigest oci.Digest, isManifest bool) (_ oci.BlobReader, _err error) {
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer closeOnError(&_err, resp.Body)
-	knownDigest, _ := ocidigest.Parse(rreq.Digest)
 	desc, err := descriptorFromResponse(resp, knownDigest, requireSize)
 	if err != nil {
 		return nil, fmt.Errorf("invalid descriptor in response: %v", err)
@@ -152,39 +140,32 @@ func (c *client) read(ctx context.Context, rreq *ocirequest.Request) (_ oci.Blob
 		// We know the request must be a tag-getting
 		// request because all other requests take a digest not a tag
 		// but sanity check anyway.
-		if rreq.Kind != ocirequest.ReqManifestGet {
+		if !isManifest {
 			return nil, fmt.Errorf("internal error: no digest available for non-tag request")
 		}
 
-		// If the manifest is of a reasonable size, just read it into memory
-		// and calculate the digest that way, otherwise issue a HEAD
-		// request which should hopefully (and does in the ECR case)
-		// give us the digest we need.
-		if desc.Size <= inMemThreshold {
-			data, err := io.ReadAll(io.LimitReader(resp.Body, desc.Size+1))
-			if err != nil {
-				return nil, fmt.Errorf("failed to read body to determine digest: %v", err)
-			}
-			if int64(len(data)) != desc.Size {
-				return nil, fmt.Errorf("body size mismatch")
-			}
-			desc.Digest = ocidigest.FromBytes(data)
-			resp.Body.Close()
-			resp.Body = io.NopCloser(bytes.NewReader(data))
-		} else {
-			rreq1 := rreq
-			rreq1.Kind = ocirequest.ReqManifestHead
-			resp1, err := c.doRequest(ctx, rreq1)
-			if err != nil {
-				return nil, err
-			}
-			resp1.Body.Close()
-			knownDigest, _ := ocidigest.Parse(rreq1.Digest)
-			desc, err = descriptorFromResponse(resp1, knownDigest, requireSize|requireDigest)
-			if err != nil {
-				return nil, err
-			}
+		if desc.Size > maxManifestSize {
+			return nil, fmt.Errorf("manifest size %d exceeds maximum size %d", desc.Size, maxManifestSize)
 		}
+
+		data, err := io.ReadAll(io.LimitReader(resp.Body, maxManifestSize+1))
+		if err != nil {
+			return nil, fmt.Errorf("failed to read body to determine digest: %v", err)
+		}
+		if int64(len(data)) != desc.Size {
+			return nil, fmt.Errorf("body size mismatch")
+		}
+		desc.Digest = ocidigest.FromBytes(data)
+		resp.Body.Close()
+		resp.Body = io.NopCloser(bytes.NewReader(data))
 	}
 	return newBlobReader(resp.Body, desc), nil
+}
+
+func blobURL(repo string, digest oci.Digest) string {
+	return "/v2/" + repo + "/blobs/" + digest.String()
+}
+
+func manifestURL(repo string, tagOrDigest string) string {
+	return "/v2/" + repo + "/manifests/" + tagOrDigest
 }

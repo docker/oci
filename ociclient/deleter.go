@@ -19,35 +19,37 @@ import (
 	"net/http"
 
 	"github.com/docker/oci"
-	"github.com/docker/oci/internal/ocirequest"
 )
 
-func (c *client) DeleteBlob(ctx context.Context, repoName string, digest oci.Digest) error {
-	return c.delete(ctx, &ocirequest.Request{
-		Kind:   ocirequest.ReqBlobDelete,
-		Repo:   repoName,
-		Digest: digest.String(),
-	})
+// DeleteBlob deletes the blob with the given digest from the repository.
+func (c *Client) DeleteBlob(ctx context.Context, repoName string, digest oci.Digest) error {
+	req, err := newRequest(ctx, http.MethodDelete, blobURL(repoName, digest), nil, deleteScope(repoName))
+	if err != nil {
+		return err
+	}
+	return c.delete(req)
 }
 
-func (c *client) DeleteManifest(ctx context.Context, repoName string, digest oci.Digest) error {
-	return c.delete(ctx, &ocirequest.Request{
-		Kind:   ocirequest.ReqManifestDelete,
-		Repo:   repoName,
-		Digest: digest.String(),
-	})
+// DeleteManifest deletes the manifest with the given digest from the repository.
+func (c *Client) DeleteManifest(ctx context.Context, repoName string, digest oci.Digest) error {
+	req, err := newRequest(ctx, http.MethodDelete, manifestURL(repoName, digest.String()), nil, deleteScope(repoName))
+	if err != nil {
+		return err
+	}
+	return c.delete(req)
 }
 
-func (c *client) DeleteTag(ctx context.Context, repoName string, tagName string) error {
-	return c.delete(ctx, &ocirequest.Request{
-		Kind: ocirequest.ReqManifestDelete,
-		Repo: repoName,
-		Tag:  tagName,
-	})
+// DeleteTag deletes the manifest with the given tag from the repository.
+func (c *Client) DeleteTag(ctx context.Context, repoName string, tagName string) error {
+	req, err := newRequest(ctx, http.MethodDelete, manifestURL(repoName, tagName), nil, deleteScope(repoName))
+	if err != nil {
+		return err
+	}
+	return c.delete(req)
 }
 
-func (c *client) delete(ctx context.Context, rreq *ocirequest.Request) error {
-	resp, err := c.doRequest(ctx, rreq, http.StatusAccepted)
+func (c *Client) delete(req *http.Request) error {
+	resp, err := c.do(req, http.StatusAccepted)
 	if err != nil {
 		return err
 	}

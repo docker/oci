@@ -54,14 +54,14 @@ func TestAuthScopes(t *testing.T) {
 	assertScope("repository:foo/bar:pull", func(ctx context.Context, r oci.Interface) {
 		r.ResolveTag(ctx, "foo/bar", "sometag")
 	})
-	assertScope("repository:foo/bar:push", func(ctx context.Context, r oci.Interface) {
+	assertScope("repository:foo/bar:pull,push", func(ctx context.Context, r oci.Interface) {
 		r.PushBlob(ctx, "foo/bar", oci.Descriptor{
 			MediaType: "application/json",
 			Digest:    testDigest,
 			Size:      3,
 		}, strings.NewReader("foo"))
 	})
-	assertScope("repository:foo/bar:push", func(ctx context.Context, r oci.Interface) {
+	assertScope("repository:foo/bar:pull,push", func(ctx context.Context, r oci.Interface) {
 		w, err := r.PushBlobChunked(ctx, "foo/bar", 0)
 		require.NoError(t, err)
 		w.Write([]byte("foo"))
@@ -74,21 +74,21 @@ func TestAuthScopes(t *testing.T) {
 		_, err = w.Commit(ocidigest.FromBytes([]byte("foobar")))
 		require.NoError(t, err)
 	})
-	assertScope("repository:x/y:pull repository:z/w:push", func(ctx context.Context, r oci.Interface) {
+	assertScope("repository:x/y:pull repository:z/w:pull,push", func(ctx context.Context, r oci.Interface) {
 		r.MountBlob(ctx, "x/y", "z/w", testDigest)
 	})
-	assertScope("repository:foo/bar:push", func(ctx context.Context, r oci.Interface) {
+	assertScope("repository:foo/bar:pull,push", func(ctx context.Context, r oci.Interface) {
 		r.PushManifest(ctx, "foo/bar", []byte("something"), "application/json", &oci.PushManifestParameters{
 			Tags: []string{"sometag"},
 		})
 	})
-	assertScope("repository:foo/bar:push", func(ctx context.Context, r oci.Interface) {
+	assertScope("repository:foo/bar:delete", func(ctx context.Context, r oci.Interface) {
 		r.DeleteBlob(ctx, "foo/bar", testDigest)
 	})
-	assertScope("repository:foo/bar:push", func(ctx context.Context, r oci.Interface) {
+	assertScope("repository:foo/bar:delete", func(ctx context.Context, r oci.Interface) {
 		r.DeleteManifest(ctx, "foo/bar", testDigest)
 	})
-	assertScope("repository:foo/bar:push", func(ctx context.Context, r oci.Interface) {
+	assertScope("repository:foo/bar:delete", func(ctx context.Context, r oci.Interface) {
 		r.DeleteTag(ctx, "foo/bar", "sometag")
 	})
 	assertScope("registry:catalog:*", func(ctx context.Context, r oci.Interface) {

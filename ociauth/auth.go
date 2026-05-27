@@ -151,9 +151,8 @@ func (a *stdTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 	ctx := req.Context()
 	requiredScope := RequestInfoFromContext(ctx).RequiredScope
-	wantScope := ScopeFromContext(ctx)
 
-	if err := r.setAuthorization(ctx, req, requiredScope, wantScope); err != nil {
+	if err := r.setAuthorization(ctx, req, requiredScope); err != nil {
 		return nil, err
 	}
 	resp, err := r.transport.RoundTrip(req)
@@ -171,7 +170,7 @@ func (a *stdTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if challenge == nil {
 		return resp, nil
 	}
-	authAdded, tokenAcquired, err := r.setAuthorizationFromChallenge(ctx, req, challenge, requiredScope, wantScope)
+	authAdded, tokenAcquired, err := r.setAuthorizationFromChallenge(ctx, req, challenge)
 	if err != nil {
 		resp.Body.Close()
 		return nil, err
@@ -218,7 +217,7 @@ func (a *stdTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 // setAuthorization sets up authorization on the given request using any
 // auth information currently available.
-func (r *registry) setAuthorization(ctx context.Context, req *http.Request, requiredScope, wantScope Scope) error {
+func (r *registry) setAuthorization(ctx context.Context, req *http.Request, requiredScope Scope) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// Remove tokens that have expired or will expire soon so that
@@ -247,7 +246,7 @@ func (r *registry) setAuthorization(ctx context.Context, req *http.Request, requ
 		// acquiring several tokens concurrently. We should relax the lock
 		// to allow that.
 
-		accessToken, err := r.acquireAccessToken(ctx, requiredScope, wantScope)
+		accessToken, err := r.acquireAccessToken(ctx, requiredScope)
 		if err != nil {
 			// Avoid using %w to wrap the error because we don't want the
 			// caller of RoundTrip (usually ociclient) to assume that the
@@ -264,7 +263,7 @@ func (r *registry) setAuthorization(ctx context.Context, req *http.Request, requ
 	return nil
 }
 
-func (r *registry) setAuthorizationFromChallenge(ctx context.Context, req *http.Request, challenge *authHeader, requiredScope, wantScope Scope) (authAdded, tokenAcquired bool, _ error) {
+func (r *registry) setAuthorizationFromChallenge(ctx context.Context, req *http.Request, challenge *authHeader) (authAdded, tokenAcquired bool, _ error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.wwwAuthenticate = challenge
@@ -272,7 +271,7 @@ func (r *registry) setAuthorizationFromChallenge(ctx context.Context, req *http.
 	switch {
 	case r.wwwAuthenticate.scheme == "bearer":
 		scope := ParseScope(r.wwwAuthenticate.params["scope"])
-		accessToken, err := r.acquireAccessToken(ctx, scope, wantScope.Union(requiredScope))
+		accessToken, err := r.acquireAccessToken(ctx, scope)
 		if err != nil {
 			return false, false, err
 		}
@@ -320,41 +319,14 @@ func (r *registry) init() error {
 }
 
 // acquireAccessToken tries to acquire an access token for authorizing a request.
-// The requiredScopeStr parameter indicates the scope that's definitely
-// required. This is a string because apparently some servers are picky
-// about getting exactly the same scope in the auth request that was
-// returned in the challenge. The wantScope parameter indicates
-// what scope might be required in the future.
+// The scope comes from the registry's Www-Authenticate challenge.
 //
 // This method assumes that there has been a previous 401 response with
 // a Www-Authenticate: Bearer... header.
-func (r *registry) acquireAccessToken(ctx context.Context, requiredScope, wantScope Scope) (string, error) {
-	scope := requiredScope.Union(wantScope)
+func (r *registry) acquireAccessToken(ctx context.Context, scope Scope) (string, error) {
 	tok, err := r.acquireToken(ctx, scope)
 	if err != nil {
-		var herr oci.HTTPError
-		if !errors.As(err, &herr) || herr.StatusCode() != http.StatusUnauthorized {
-			return "", err
-		}
-		// The documentation says this:
-		//
-		//	If the client only has a subset of the requested
-		// 	access it _must not be considered an error_ as it is
-		//	not the responsibility of the token server to
-		//	indicate authorization errors as part of this
-		//	workflow.
-		//
-		// However it's apparently not uncommon for servers to reject
-		// such requests anyway, so if we've got an unauthorized error
-		// and wantScope goes beyond requiredScope, it may be because
-		// the server is rejecting the request.
-		scope = requiredScope
-		tok, err = r.acquireToken(ctx, scope)
-		if err != nil {
-			return "", err
-		}
-		// TODO mark the registry as picky about tokens so we don't
-		// attempt twice every time?
+		return "", err
 	}
 	if tok.RefreshToken != "" {
 		r.refreshToken = tok.RefreshToken
