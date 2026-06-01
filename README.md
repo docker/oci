@@ -28,6 +28,7 @@ used to interact with those features.
 | `ociclient` | HTTP client that implements `oci.Interface` against a remote OCI registry. |
 | `ociserver` | HTTP server that serves the OCI distribution protocol on top of any `oci.Interface`. |
 | `ocimem` | Lightweight in-memory `oci.Interface` implementation, useful for testing and caching. |
+| `ocilayout` | Filesystem-backed `oci.Interface` implementation for OCI Image Layout directories, including shared and per-repository layouts. |
 | `ociauth` | Authentication transport implementing the Docker/OCI token flow, plus helpers for loading credentials from Docker config files. |
 | `ocifilter` | Wrappers that expose restricted or transformed views of a registry (read-only, immutable, namespace prefix, custom access control). |
 | `ociunify` | Combines two registries into a single unified `oci.Interface`, with configurable read policy. |
