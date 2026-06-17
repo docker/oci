@@ -46,7 +46,6 @@ func (c *Client) PushManifest(ctx context.Context, repo string, contents []byte,
 		Digest:    dig,
 		Size:      int64(len(contents)),
 		MediaType: mediaType,
-		Data:      contents,
 	}
 
 	var tags []string
@@ -57,14 +56,14 @@ func (c *Client) PushManifest(ctx context.Context, repo string, contents []byte,
 	// If there are no tags, push once by digest.
 	// If there are tags, push once per tag (all referencing the same contents).
 	if len(tags) == 0 {
-		_, err := c.putManifest(ctx, repo, desc.Digest.String(), nil, desc)
+		_, err := c.putManifest(ctx, repo, desc.Digest.String(), nil, desc, contents)
 		return desc, err
 	} else {
-		createdTags, err := c.putManifest(ctx, repo, desc.Digest.String(), tags, desc)
+		createdTags, err := c.putManifest(ctx, repo, desc.Digest.String(), tags, desc, contents)
 		if err != nil || len(createdTags) != len(tags) {
 			// bulk send failed, fallback to sending one at a time
 			for _, tag := range tags {
-				_, err = c.putManifest(ctx, repo, tag, nil, desc)
+				_, err = c.putManifest(ctx, repo, tag, nil, desc, contents)
 				if err != nil {
 					return oci.Descriptor{}, fmt.Errorf("creating tag %s failed: %w", tag, err)
 				}
@@ -74,16 +73,9 @@ func (c *Client) PushManifest(ctx context.Context, repo string, contents []byte,
 	return desc, nil
 }
 
-func (c *Client) putManifest(ctx context.Context, repo string, tagOrDigest string, tags []string, desc oci.Descriptor) ([]string, error) {
-	u := manifestURL(repo, tagOrDigest)
-	if len(tags) > 0 {
-		q := make(url.Values)
-		for _, tag := range tags {
-			q.Add("tag", tag)
-		}
-		u += "?" + q.Encode()
-	}
-	req, err := newRequest(ctx, http.MethodPut, u, bytes.NewReader(desc.Data), pushScope(repo))
+func (c *Client) putManifest(ctx context.Context, repo string, tagOrDigest string, tags []string, desc oci.Descriptor, contents []byte) ([]string, error) {
+	u := manifestURLWithTags(repo, tagOrDigest, tags)
+	req, err := newRequest(ctx, http.MethodPut, u, bytes.NewReader(contents), pushScope(repo))
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +94,43 @@ func (c *Client) putManifest(ctx context.Context, repo string, tagOrDigest strin
 		}
 	}
 	return createdTags, nil
+}
+
+func manifestURLWithTags(repo string, tagOrDigest string, tags []string) string {
+	u := manifestURL(repo, tagOrDigest)
+	if len(tags) == 0 {
+		return u
+	}
+	q := make(url.Values)
+	for _, tag := range tags {
+		q.Add("tag", tag)
+	}
+	return u + "?" + q.Encode()
+}
+
+// CopyImage copies an image from fromRepo into toRepo using reference as the
+// source tag or digest.
+//
+// Experimental: CopyImage uses a registry extension and is not part of
+// [oci.Interface] or the OCI distribution specification.
+func (c *Client) CopyImage(ctx context.Context, fromRepo, toRepo, reference string) (oci.Descriptor, error) {
+	q := url.Values{}
+	q.Set("from", fromRepo)
+	q.Set("reference", reference)
+	req, err := newRequest(ctx, http.MethodPost, copyImageURL(toRepo, q), nil, mountScope(fromRepo, toRepo))
+	if err != nil {
+		return oci.Descriptor{}, err
+	}
+	resp, err := c.do(req, http.StatusCreated)
+	if err != nil {
+		return oci.Descriptor{}, err
+	}
+	resp.Body.Close()
+	return descriptorFromResponse(resp, "", requireDigest)
+}
+
+func copyImageURL(repo string, q url.Values) string {
+	return "/v2/" + repo + "/_docker/copy/image?" + q.Encode()
 }
 
 // MountBlob makes a blob from fromRepo available in toRepo without uploading it again.
