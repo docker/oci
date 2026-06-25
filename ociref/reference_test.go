@@ -400,15 +400,60 @@ func TestParseReference(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, test.wantRef, ref)
 			//assert.Equal(t, test.input, ref.String())
-			if test.wantRef.Host != "" {
-				ref1, err := Parse(test.input)
-				require.NoError(t, err)
-				assert.Equal(t, test.wantRef, ref1)
-			} else {
-				_, err := Parse(test.input)
+		})
+	}
+}
+
+func TestParse(t *testing.T) {
+	tests := []struct {
+		input   string
+		wantErr string
+		wantRef Reference
+	}{{
+		input: "test.com/repo:tag",
+		wantRef: Reference{
+			Host:       "test.com",
+			Repository: "repo",
+			Tag:        "tag",
+		},
+	}, {
+		input: "test:5000/repo",
+		wantRef: Reference{
+			Host:       "test:5000",
+			Repository: "repo",
+		},
+	}, {
+		input: "docker.io/ubuntu",
+		wantRef: Reference{
+			Host:       "docker.io",
+			Repository: "ubuntu",
+		},
+	}, {
+		input: "index.docker.io/foo",
+		wantRef: Reference{
+			Host:       "index.docker.io",
+			Repository: "foo",
+		},
+	}, {
+		input:   "test_com",
+		wantErr: `reference does not contain host name`,
+	}, {
+		input:   "rocket.chat",
+		wantErr: `reference does not contain host name`,
+	}, {
+		input:   "test.com:5000",
+		wantErr: `reference does not contain host name`,
+	}}
+	for _, test := range tests {
+		t.Run(test.input, func(t *testing.T) {
+			ref, err := Parse(test.input)
+			if test.wantErr != "" {
 				require.Error(t, err)
-				require.Regexp(t, `reference does not contain host name`, err.Error())
+				require.Regexp(t, test.wantErr, err.Error())
+				return
 			}
+			require.NoError(t, err)
+			assert.Equal(t, test.wantRef, ref)
 		})
 	}
 }

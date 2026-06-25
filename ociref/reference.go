@@ -164,7 +164,7 @@ func IsValidDigest(d string) bool {
 // Unlike "docker pull" however, there is no default registry: when
 // presented with a bare repository name, Parse will return an error.
 func Parse(refStr string) (Reference, error) {
-	ref, err := ParseRelative(refStr)
+	ref, err := parse(refStr)
 	if err != nil {
 		return Reference{}, err
 	}
@@ -179,9 +179,28 @@ func Parse(refStr string) (Reference, error) {
 //
 // It is represented in string form as [HOST[:PORT]/]NAME[:TAG|@DIGEST]
 // form: the same syntax accepted by "docker pull".
-// Unlike "docker pull" however, there is no default registry: when
-// presented with a bare repository name, the Host field will be empty.
+// Like "docker pull", references without a host default to Docker Hub,
+// and single-component Docker Hub repository names default to the "library"
+// namespace.
 func ParseRelative(refStr string) (Reference, error) {
+	ref, err := parse(refStr)
+	if err != nil {
+		return Reference{}, err
+	}
+	// Normalize Docker Hub registry hosts, also default to Docker if none is provided
+	if _, ok := ocidocker.DockerHubHosts[ref.Host]; ok || ref.Host == "" {
+		ref.Host = "docker.io"
+	}
+	if ref.Host == "docker.io" && !strings.Contains(ref.Repository, "/") {
+		ref.Repository = "library/" + ref.Repository
+	}
+	if len(ref.Repository) > 255 {
+		return Reference{}, fmt.Errorf("repository name too long")
+	}
+	return ref, nil
+}
+
+func parse(refStr string) (Reference, error) {
 	m := referencePat().FindStringSubmatch(refStr)
 	if m == nil {
 		return Reference{}, fmt.Errorf("invalid reference syntax (%q)", refStr)
@@ -200,13 +219,6 @@ func ParseRelative(refStr string) (Reference, error) {
 		if err := ref.Digest.Validate(); err != nil {
 			return Reference{}, fmt.Errorf("invalid digest %q: %v", ref.Digest, err)
 		}
-	}
-	// Normalize Docker Hub registry hosts, also default to Docker if none is provided
-	if _, ok := ocidocker.DockerHubHosts[ref.Host]; ok || ref.Host == "" {
-		ref.Host = "docker.io"
-	}
-	if ref.Host == "docker.io" && !strings.Contains(ref.Repository, "/") {
-		ref.Repository = "library/" + ref.Repository
 	}
 	if len(ref.Repository) > 255 {
 		return Reference{}, fmt.Errorf("repository name too long")
