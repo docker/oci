@@ -1,12 +1,15 @@
 package ocimem
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/docker/oci"
+	"github.com/docker/oci/ocidigest"
 	"github.com/docker/oci/ocitest"
 	"github.com/stretchr/testify/require"
 )
@@ -53,6 +56,26 @@ var pushManifestTests = []struct {
 		})
 	},
 	wantError: `invalid manifest: blob for layers\[0\] not found`,
+}, {
+	testName: "NonExistentLayerReferenceWithURLs",
+	preload: ocitest.RepoContent{
+		Blobs: map[string]string{
+			"a": "{}",
+		},
+	},
+	mediaType: oci.MediaTypeImageManifest,
+	manifestData: func(content ocitest.PushedRepoContent) []byte {
+		return mustJSONMarshal(oci.IndexOrManifest{
+			MediaType: oci.MediaTypeImageManifest,
+			Config:    ref(content.Blobs["a"]),
+			Layers: []oci.Descriptor{{
+				MediaType: "application/vnd.docker.image.rootfs.foreign.diff.tar.gzip",
+				Size:      1,
+				Digest:    ocitest.DigestRef("b"),
+				URLs:      []string{"https://example.com/foreign-layer"},
+			}},
+		})
+	},
 }, {
 	testName: "NonExistentSubjectReference",
 	preload: ocitest.RepoContent{
@@ -282,6 +305,121 @@ func TestPushManifest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNonCanonicalPushBlob(t *testing.T) {
+	ctx := context.Background()
+	r := New()
+	data := []byte("blob data")
+	digest := ocidigest.SHA512.FromBytes(data)
+	desc := oci.Descriptor{
+		MediaType: "application/octet-stream",
+		Digest:    digest,
+		Size:      int64(len(data)),
+	}
+
+	gotDesc, err := r.PushBlob(ctx, "test", desc, bytes.NewReader(data))
+	require.NoError(t, err)
+	require.Equal(t, desc, gotDesc)
+
+	resolved, err := r.ResolveBlob(ctx, "test", digest)
+	require.NoError(t, err)
+	require.Equal(t, desc, resolved)
+
+	br, err := r.GetBlob(ctx, "test", digest)
+	require.NoError(t, err)
+	defer br.Close()
+	require.Equal(t, desc, br.Descriptor())
+	gotData, err := io.ReadAll(br)
+	require.NoError(t, err)
+	require.Equal(t, data, gotData)
+}
+
+func TestNonCanonicalPushBlobRejectsDigestMismatch(t *testing.T) {
+	ctx := context.Background()
+	r := New()
+	data := []byte("blob data")
+	desc := oci.Descriptor{
+		MediaType: "application/octet-stream",
+		Digest:    ocidigest.SHA512.FromBytes([]byte("other data")),
+		Size:      int64(len(data)),
+	}
+
+	_, err := r.PushBlob(ctx, "test", desc, bytes.NewReader(data))
+	require.Error(t, err)
+	require.Regexp(t, `digest invalid: provided digest did not match uploaded content`, err.Error())
+}
+
+func TestNonCanonicalPushBlobChunked(t *testing.T) {
+	ctx := context.Background()
+	r := New()
+	data := []byte("chunked blob data")
+	digest := ocidigest.SHA512.FromBytes(data)
+
+	w, err := r.PushBlobChunked(ctx, "test", 0)
+	require.NoError(t, err)
+	_, err = w.Write(data[:7])
+	require.NoError(t, err)
+	_, err = w.Write(data[7:])
+	require.NoError(t, err)
+	desc, err := w.Commit(digest)
+	require.NoError(t, err)
+	require.Equal(t, digest, desc.Digest)
+	require.Equal(t, int64(len(data)), desc.Size)
+
+	resolved, err := r.ResolveBlob(ctx, "test", digest)
+	require.NoError(t, err)
+	require.Equal(t, desc, resolved)
+}
+
+func TestNonCanonicalPushManifest(t *testing.T) {
+	ctx := context.Background()
+	r := New()
+	configData := []byte("{}")
+	configDigest := ocidigest.SHA512.FromBytes(configData)
+	configDesc := oci.Descriptor{
+		MediaType: "application/vnd.example.config",
+		Digest:    configDigest,
+		Size:      int64(len(configData)),
+	}
+	_, err := r.PushBlob(ctx, "test", configDesc, bytes.NewReader(configData))
+	require.NoError(t, err)
+
+	manifest := oci.IndexOrManifest{
+		MediaType: oci.MediaTypeImageManifest,
+		Config:    ref(configDesc),
+	}
+	data := mustJSONMarshal(manifest)
+	manifestDigest := ocidigest.SHA512.FromBytes(data)
+	manifestDesc := oci.Descriptor{
+		MediaType: oci.MediaTypeImageManifest,
+		Digest:    manifestDigest,
+		Size:      int64(len(data)),
+	}
+	desc, err := r.PushManifest(ctx, "test", data, oci.MediaTypeImageManifest, &oci.PushManifestParameters{
+		Digest: manifestDigest,
+		Tags:   []string{"sha512"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, manifestDesc, desc)
+	storedManifestDesc := manifestDesc
+	storedManifestDesc.ArtifactType = configDesc.MediaType
+
+	resolved, err := r.ResolveManifest(ctx, "test", manifestDigest)
+	require.NoError(t, err)
+	require.Equal(t, storedManifestDesc, resolved)
+
+	tagDesc, err := r.ResolveTag(ctx, "test", "sha512")
+	require.NoError(t, err)
+	require.Equal(t, manifestDesc, tagDesc)
+
+	mr, err := r.GetTag(ctx, "test", "sha512")
+	require.NoError(t, err)
+	defer mr.Close()
+	require.Equal(t, storedManifestDesc, mr.Descriptor())
+	gotData, err := io.ReadAll(mr)
+	require.NoError(t, err)
+	require.Equal(t, data, gotData)
 }
 
 var deleteBlobTests = []struct {

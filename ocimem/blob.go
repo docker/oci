@@ -21,7 +21,6 @@ import (
 	"sync"
 
 	"github.com/docker/oci"
-	"github.com/docker/oci/ocidigest"
 )
 
 // NewBytesReader returns an implementation of oci.BlobReader
@@ -65,9 +64,9 @@ type Buffer struct {
 	commitErr        error
 }
 
-// NewBuffer returns a buffer that calls commit with the
-// when [Buffer.Commit] is invoked successfully.
-// /
+// NewBuffer returns a buffer that calls commit when [Buffer.Commit]
+// is invoked successfully.
+//
 // It's OK to call methods concurrently on a buffer.
 func NewBuffer(commit func(b *Buffer) error, uuid string) *Buffer {
 	if uuid == "" {
@@ -104,7 +103,7 @@ func (b *Buffer) ChunkSize() int {
 	return 8 * 1024 // 8KiB; not really important
 }
 
-// GetBlob returns any committed data and is descriptor. It returns an error
+// GetBlob returns any committed data and its descriptor. It returns an error
 // if the data hasn't been committed or there was an error doing so.
 func (b *Buffer) GetBlob() (oci.Descriptor, []byte, error) {
 	b.mu.Lock()
@@ -181,8 +180,8 @@ func (b *Buffer) checkCommit(dig oci.Digest) (err error) {
 			b.commitErr = err
 		}
 	}()
-	if ocidigest.FromBytes(b.buf) != dig {
-		return fmt.Errorf("digest mismatch (sha256(%q) != %s): %w", b.buf, dig, oci.ErrDigestInvalid)
+	if got := dig.Algorithm().FromBytes(b.buf); got != dig {
+		return fmt.Errorf("digest mismatch (%s(%q) = %s, want %s): %w", dig.Algorithm(), b.buf, got, dig, oci.ErrDigestInvalid)
 	}
 	b.desc = oci.Descriptor{
 		MediaType: "application/octet-stream",
