@@ -21,7 +21,6 @@ import (
 	"sync"
 
 	"github.com/docker/oci"
-	"github.com/docker/oci/ocidigest"
 	"github.com/docker/oci/ociref"
 )
 
@@ -43,6 +42,7 @@ type repository struct {
 }
 
 type blob struct {
+	digest    oci.Digest
 	mediaType string
 	data      []byte
 	info      manifestInfo
@@ -52,7 +52,7 @@ func (b *blob) descriptor() oci.Descriptor {
 	return oci.Descriptor{
 		MediaType:    b.mediaType,
 		Size:         int64(len(b.data)),
-		Digest:       ocidigest.FromBytes(b.data),
+		Digest:       b.digest,
 		ArtifactType: b.info.artifactType,
 		Annotations:  b.info.annotations,
 	}
@@ -150,9 +150,6 @@ func (r *Registry) makeRepo(repoName string) (*repository, error) {
 	return repo, nil
 }
 
-// SHA256("")
-var emptyHash = ocidigest.FromBytes(nil)
-
 // CheckDescriptor checks that the given descriptor matches the given data or,
 // if data is nil, that the descriptor looks sane.
 func CheckDescriptor(desc oci.Descriptor, data []byte) error {
@@ -160,15 +157,15 @@ func CheckDescriptor(desc oci.Descriptor, data []byte) error {
 		return fmt.Errorf("invalid digest: %v", err)
 	}
 	if data != nil {
-		if ocidigest.FromBytes(data) != desc.Digest {
-			return fmt.Errorf("digest mismatch")
+		if desc.Digest.Algorithm().FromBytes(data) != desc.Digest {
+			return fmt.Errorf("digest mismatch: %w", oci.ErrDigestInvalid)
 		}
 		if desc.Size != int64(len(data)) {
-			return fmt.Errorf("size mismatch")
+			return fmt.Errorf("size mismatch: %w", oci.ErrSizeInvalid)
 		}
 	} else {
-		if desc.Size == 0 && desc.Digest != emptyHash {
-			return fmt.Errorf("zero sized content with mismatching digest")
+		if desc.Size == 0 && desc.Digest.Algorithm().FromBytes(nil) != desc.Digest {
+			return fmt.Errorf("zero sized content with mismatching digest: %w", oci.ErrDigestInvalid)
 		}
 	}
 	if desc.MediaType == "" {

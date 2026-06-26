@@ -43,7 +43,7 @@ func (r *Registry) PushBlob(ctx context.Context, repoName string, desc oci.Descr
 	if err != nil {
 		return oci.Descriptor{}, err
 	}
-	repo.blobs[desc.Digest] = &blob{mediaType: desc.MediaType, data: data}
+	repo.blobs[desc.Digest] = &blob{digest: desc.Digest, mediaType: desc.MediaType, data: data}
 	return desc, nil
 }
 
@@ -72,7 +72,7 @@ func (r *Registry) PushBlobChunkedResume(ctx context.Context, repoName, id strin
 			r.mu.Lock()
 			defer r.mu.Unlock()
 			desc, data, _ := b.GetBlob()
-			repo.blobs[desc.Digest] = &blob{mediaType: desc.MediaType, data: data}
+			repo.blobs[desc.Digest] = &blob{digest: desc.Digest, mediaType: desc.MediaType, data: data}
 			return nil
 		}, id)
 		repo.uploads[b.ID()] = b
@@ -179,6 +179,7 @@ func (r *Registry) PushManifest(ctx context.Context, repoName string, data []byt
 	}
 
 	repo.manifests[dig] = &blob{
+		digest:    dig,
 		mediaType: mediaType,
 		data:      data,
 		info:      info,
@@ -208,6 +209,9 @@ func (r *Registry) checkManifestReferences(repoName string, mediaType string, da
 		}
 		switch info.kind {
 		case kindBlob:
+			if len(info.desc.URLs) > 0 {
+				continue
+			}
 			if repo.blobs[info.desc.Digest] == nil {
 				return manifestInfo{}, fmt.Errorf("blob for %s not found", info.name)
 			}
