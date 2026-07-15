@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/docker/oci"
 
@@ -40,6 +41,8 @@ import (
 // TODO this should be configurable in the API.
 const debug = false
 
+const defaultHTTPTimeout = 30 * time.Second
+
 // Options holds configuration for creating a new OCI registry client.
 type Options struct {
 	// DebugID is used to prefix any log messages printed by the client.
@@ -51,6 +54,11 @@ type Options struct {
 	// by the transport created by [ociauth.NewStdTransport]. If
 	// Transport is nil, [http.DefaultTransport] will be used.
 	Transport http.RoundTripper
+
+	// Timeout specifies a time limit for requests made by the client. A zero
+	// value means no timeout. When Options is nil, the timeout defaults to 30
+	// seconds.
+	Timeout time.Duration
 
 	// Insecure specifies whether an http scheme will be used to
 	// address the host instead of https.
@@ -65,13 +73,14 @@ type Options struct {
 
 var debugID int32
 
-// New returns a client implementation that uses the OCI HTTP API. A nil opts
-// parameter is equivalent to a pointer to zero Options.
+// New returns a client implementation that uses the OCI HTTP API. When opts is
+// nil, the client uses a 30-second timeout. To disable the timeout, pass a
+// non-nil Options with Timeout set to zero.
 //
 // The host specifies the host name to talk to; it may
 // optionally be a host:port pair.
 func New(host string, opts0 *Options) (*Client, error) {
-	var opts Options
+	opts := Options{Timeout: defaultHTTPTimeout}
 	if opts0 != nil {
 		opts = *opts0
 	}
@@ -103,6 +112,7 @@ func New(host string, opts0 *Options) (*Client, error) {
 		httpScheme: u.Scheme,
 		httpClient: &http.Client{
 			Transport: opts.Transport,
+			Timeout:   opts.Timeout,
 		},
 		userAgent: opts.UserAgent,
 		debugID:   opts.DebugID,
