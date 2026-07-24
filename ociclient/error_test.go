@@ -19,11 +19,13 @@ import (
 func TestErrorStuttering(t *testing.T) {
 	// This checks that the stuttering observed in issue #31
 	// isn't an issue when ociserver wraps ociclient.
-	srv := httptest.NewServer(ociserver.New(&oci.Funcs{
+	handler, err := ociserver.New(&oci.Funcs{
 		NewError: func(ctx context.Context, methodName, repo string) error {
 			return oci.ErrManifestUnknown
 		},
-	}, nil))
+	}, nil)
+	require.NoError(t, err)
+	srv := httptest.NewServer(handler)
 	defer srv.Close()
 
 	srvURL, _ := url.Parse(srv.URL)
@@ -33,7 +35,7 @@ func TestErrorStuttering(t *testing.T) {
 	require.NoError(t, err)
 	_, err = r.GetTag(context.Background(), "foo", "sometag")
 	assert.ErrorIs(t, err, oci.ErrManifestUnknown)
-	assert.Regexp(t, `404 Not Found: manifest unknown: manifest unknown to registry`, err.Error())
+	assert.Regexp(t, `404 Not Found: manifest unknown: manifest \(sometag\) unknown to registry`, err.Error())
 
 	// ResolveTag uses HEAD rather than GET, so here we're testing
 	// the path where a response with no body gets turned back into
