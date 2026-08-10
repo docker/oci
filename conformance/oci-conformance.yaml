@@ -1,0 +1,50 @@
+tls: disabled
+resultsDir: /results
+version: "1.1"
+logging: warn
+
+# The integration harness overrides these for every backend and run.
+registry: host.docker.internal:5000
+repo1: conformance/repo1
+repo2: conformance/repo2
+
+username: ""
+password: ""
+
+apis:
+  ping: true
+  pull: true
+  push: true
+  blobs:
+    atomic: true
+    delete: true
+    digestHeader: true
+    mountAnonymous: true
+    uploadCancel: true
+  manifests:
+    atomic: true
+    delete: true
+    digestHeader: true
+    tagParam: true
+  tags:
+    atomic: true
+    delete: true
+    list: true
+  referrer: true
+
+data:
+  image: true
+  index: true
+  indexList: true
+  sparse: false
+  artifact: true
+  subject: true
+  subjectMissing: true
+  artifactList: true
+  subjectList: true
+  dataField: true
+  nondistributable: true
+  customFields: true
+  noLayers: true
+  emptyBlob: true
+  sha512: true

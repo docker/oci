@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -25,8 +26,14 @@ func TestReferrersFallback(t *testing.T) {
 
 	// Test that the client falls back to using the referrers tag API
 	// when the referrers API is not enabled.
-	srv := httptest.NewServer(ociserver.New(ocidebug.New(ocimem.New(), t.Logf), &ociserver.Options{
-		DisableReferrersAPI: true,
+	handler, err := ociserver.New(ocidebug.New(ocimem.New(), t.Logf), nil)
+	require.NoError(t, err)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/referrers/") {
+			http.NotFound(w, r)
+			return
+		}
+		handler.ServeHTTP(w, r)
 	}))
 	t.Cleanup(srv.Close)
 

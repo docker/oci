@@ -25,7 +25,9 @@ func TestAuthScopes(t *testing.T) {
 	// All the call semantics themselves are tested elsewhere, but we want to be
 	// sure that we're passing the right required auth scopes to the authorizer.
 
-	srv := httptest.NewServer(ociserver.New(ocimem.New(), nil))
+	handler, err := ociserver.New(ocimem.New(), nil)
+	require.NoError(t, err)
+	srv := httptest.NewServer(handler)
 	defer srv.Close()
 	srvURL, _ := url.Parse(srv.URL)
 

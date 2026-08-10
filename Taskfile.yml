@@ -45,3 +45,15 @@ tasks:
     cmds:
       - task: lint
       - task: test
+
+  conformance:
+    desc: Run OCI distribution conformance tests against all supported backends
+    cmd: go test -tags=integration ./conformance -run TestOCIConformance -count=1 -v
+
+  conformance:ocimem:
+    desc: Run OCI distribution conformance tests against ocimem
+    cmd: go test -tags=integration ./conformance -run TestOCIConformance/ocimem -count=1 -v
+
+  conformance:ocilayout:
+    desc: Run OCI distribution conformance tests against ocilayout
+    cmd: go test -tags=integration ./conformance -run TestOCIConformance/ocilayout -count=1 -v

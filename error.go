@@ -332,6 +332,7 @@ var (
 	ErrDenied              = NewError("requested access to the resource is denied", "DENIED", nil)
 	ErrUnsupported         = NewError("the operation is unsupported", "UNSUPPORTED", nil)
 	ErrTooManyRequests     = NewError("too many requests", "TOOMANYREQUESTS", nil)
+	ErrReferenced          = NewError("referenced by another object", "DENIED", nil)
 
 	// ErrRangeInvalid allows Interface implementations to reject invalid ranges,
 	// such as a chunked upload PATCH not following the range from a previous PATCH.

@@ -85,7 +85,11 @@ func main1() error {
 		writeNetAddr(l)
 	}
 	fmt.Printf("listening on %v\n", l.Addr())
-	err = http.Serve(l, ociserver.New(r, nil))
+	srv, err := ociserver.New(r, nil)
+	if err != nil {
+		return fmt.Errorf("cannot construct server: %v", err)
+	}
+	err = http.Serve(l, srv)
 	return fmt.Errorf("http server error: %v", err)
 }
 
