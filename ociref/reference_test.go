@@ -557,6 +557,9 @@ var isValidTagTests = []struct {
 	tag  string
 	want bool
 }{{
+	tag:  "",
+	want: false,
+}, {
 	tag:  "hello",
 	want: true,
 }, {

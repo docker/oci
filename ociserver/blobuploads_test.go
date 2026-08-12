@@ -12,7 +12,39 @@ import (
 
 	"github.com/docker/oci"
 	"github.com/docker/oci/ocidigest"
+	"github.com/stretchr/testify/require"
 )
+
+func TestBlobUploadPostValidatesMountParameters(t *testing.T) {
+	t.Parallel()
+
+	dgst := ocidigest.FromBytes([]byte("blob"))
+	tests := []struct {
+		name  string
+		query string
+	}{
+		{name: "from is not a local repository", query: "mount=" + dgst.String() + "&from=UPPERCASE"},
+		{name: "from contains a tag", query: "mount=" + dgst.String() + "&from=repo%3Alatest"},
+		{name: "from is too long", query: "mount=" + dgst.String() + "&from=" + strings.Repeat("a", 256)},
+		{name: "mount is not a digest", query: "mount=another%2Frepository&from=repo"},
+		{name: "mount without from is still validated", query: "mount=not-a-digest"},
+		{name: "digest with mount is still validated", query: "digest=not-a-digest&mount=" + dgst.String() + "&from=repo"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := &Server{db: (*oci.Funcs)(nil)}
+			req := httptest.NewRequest(http.MethodPost, "/v2/repo/blobs/uploads/?"+tt.query, nil)
+			rec := httptest.NewRecorder()
+
+			serveTestRoute(t, `/v2/*name/blobs/uploads/`, s.blobUploadPost(), rec, req)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			require.Contains(t, rec.Body.String(), `"code":"BLOB_UPLOAD_INVALID"`)
+		})
+	}
+}
 
 func TestParseRange(t *testing.T) {
 	t.Parallel()

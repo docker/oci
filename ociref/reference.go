@@ -142,7 +142,7 @@ func IsValidHost(s string) bool {
 // IsValidRepository reports whether s is a valid repository part
 // of a reference string.
 func IsValidRepository(s string) bool {
-	return repoPat().MatchString(s)
+	return len(s) <= 255 && repoPat().MatchString(s)
 }
 
 // IsValidTag reports whether s is a valid reference tag.
@@ -232,6 +232,9 @@ func parse(refStr string) (Reference, error) {
 }
 
 func checkTag(s string) error {
+	if len(s) == 0 {
+		return fmt.Errorf("tag is empty")
+	}
 	if len(s) > 128 {
 		return fmt.Errorf("tag too long")
 	}

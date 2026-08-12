@@ -3,7 +3,9 @@ package ociserver
 import (
 	"encoding/json"
 	"errors"
+	"mime"
 	"net/http"
+	"strings"
 
 	"github.com/docker/oci"
 	"github.com/docker/oci/ocidigest"
@@ -23,6 +25,10 @@ func (s *Server) referrersGet() http.HandlerFunc {
 		name := mux.URLParam(r, "name")
 		dgstString := mux.URLParam(r, "digest")
 		artifactType := r.URL.Query().Get("artifactType")
+		if artifactType != "" && !isValidArtifactType(artifactType) {
+			returnError(w, ErrBadRequest("invalid artifactType"))
+			return
+		}
 
 		dgst, err := ocidigest.Parse(dgstString)
 		if err != nil {
@@ -70,4 +76,16 @@ func (s *Server) referrersGet() http.HandlerFunc {
 			s.logError(r.Context(), "writing referrers response", err, "repository", name, "digest", dgst, "artifactType", artifactType)
 		}
 	}
+}
+
+func isValidArtifactType(artifactType string) bool {
+	if len(artifactType) > oci.MaxArtifactTypeLen {
+		return false
+	}
+	mediaType, params, err := mime.ParseMediaType(artifactType)
+	if err != nil || len(params) != 0 {
+		return false
+	}
+	typeName, subtype, ok := strings.Cut(mediaType, "/")
+	return ok && typeName != "*" && subtype != "*"
 }

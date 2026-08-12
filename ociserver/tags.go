@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/docker/oci"
+	"github.com/docker/oci/ociref"
 	"github.com/docker/oci/ociserver/mux"
 )
 
@@ -16,6 +17,10 @@ func (s *Server) tagsGet() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		name := mux.URLParam(r, "name")
 		last := r.URL.Query().Get("last")
+		if last != "" && !ociref.IsValidTag(last) {
+			returnError(w, ErrBadRequest("invalid last"))
+			return
+		}
 		limit := 0
 		if n := r.URL.Query().Get("n"); n != "" {
 			i, err := strconv.Atoi(n)

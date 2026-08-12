@@ -33,6 +33,10 @@ func (s *Server) manifestHeadGet() http.HandlerFunc {
 			}
 			desc, err = s.db.ResolveManifest(r.Context(), name, dgst)
 		} else {
+			if !ociref.IsValidTag(reference) {
+				returnError(w, ErrManifestInvalid("invalid tag name"))
+				return
+			}
 			desc, err = s.db.ResolveTag(r.Context(), name, reference)
 		}
 		if err != nil {
@@ -135,6 +139,12 @@ func (s *Server) manifestPut() http.HandlerFunc {
 		name := mux.URLParam(r, "name")
 		reference := mux.URLParam(r, "reference")
 		tags := r.URL.Query()["tag"]
+		for _, tag := range tags {
+			if !ociref.IsValidTag(tag) {
+				returnError(w, ErrManifestInvalid("invalid tag name"))
+				return
+			}
+		}
 
 		defer func() {
 			err := r.Body.Close()
@@ -182,7 +192,12 @@ func (s *Server) manifestPut() http.HandlerFunc {
 		}
 		contentType := r.Header.Get("Content-Type")
 		if contentType != "" {
-			contentType, _, _ = strings.Cut(contentType, ";") // strip any parameters
+			var err error
+			contentType, _, err = mime.ParseMediaType(contentType)
+			if err != nil {
+				returnError(w, ErrManifestInvalid("invalid Content-Type"))
+				return
+			}
 		}
 		if mani.MediaType != "" && contentType != "" && mani.MediaType != contentType {
 			returnError(w, ErrManifestInvalid("mediaType does not match Content-Type"))
@@ -266,6 +281,10 @@ func (s *Server) manifestDelete() http.HandlerFunc {
 			}
 			err = s.db.DeleteManifest(r.Context(), name, dgst)
 		} else {
+			if !ociref.IsValidTag(reference) {
+				returnError(w, ErrManifestInvalid("invalid tag name"))
+				return
+			}
 			err = s.db.DeleteTag(r.Context(), name, reference)
 		}
 		if err != nil {
