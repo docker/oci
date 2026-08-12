@@ -1,6 +1,14 @@
 package ociserver
 
-import "testing"
+import (
+	"bytes"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/docker/oci"
+	"github.com/stretchr/testify/require"
+)
 
 func TestAcceptsMediaType(t *testing.T) {
 	t.Parallel()
@@ -75,4 +83,54 @@ func TestAcceptsMediaType(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestManifestHandlersValidateTags(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		method  string
+		target  string
+		handler func(*Server) http.HandlerFunc
+		body    []byte
+	}{
+		{name: "get reference", method: http.MethodGet, target: "/v2/repo/manifests/-bad", handler: (*Server).manifestHeadGet},
+		{name: "delete reference", method: http.MethodDelete, target: "/v2/repo/manifests/-bad", handler: (*Server).manifestDelete},
+		{
+			name:    "put tag query",
+			method:  http.MethodPut,
+			target:  "/v2/repo/manifests/latest?tag=-bad",
+			handler: (*Server).manifestPut,
+			body:    []byte(`{}`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := &Server{db: (*oci.Funcs)(nil)}
+			req := httptest.NewRequest(tt.method, tt.target, bytes.NewReader(tt.body))
+			rec := httptest.NewRecorder()
+
+			serveTestRoute(t, `/v2/*name/manifests/:reference`, tt.handler(s), rec, req)
+
+			require.Equal(t, http.StatusBadRequest, rec.Code)
+			require.Contains(t, rec.Body.String(), `"code":"MANIFEST_INVALID"`)
+		})
+	}
+}
+
+func TestManifestPutValidatesContentType(t *testing.T) {
+	t.Parallel()
+
+	s := &Server{db: (*oci.Funcs)(nil)}
+	req := httptest.NewRequest(http.MethodPut, "/v2/repo/manifests/latest", bytes.NewReader([]byte(`{}`)))
+	req.Header.Set("Content-Type", `application/vnd.oci.image.manifest.v1+json; broken`)
+	rec := httptest.NewRecorder()
+
+	serveTestRoute(t, `/v2/*name/manifests/:reference`, s.manifestPut(), rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), `"code":"MANIFEST_INVALID"`)
 }

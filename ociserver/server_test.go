@@ -146,3 +146,15 @@ func TestServerInvalidRepositoryNameReturnsOCIError(t *testing.T) {
 		}]
 	}`, rec.Body.String())
 }
+
+func TestServerRejectsOverlongRepositoryName(t *testing.T) {
+	srv, err := New((*oci.Funcs)(nil), nil)
+	require.NoError(t, err)
+
+	name := strings.Repeat("a", 256)
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v2/"+name+"/tags/list", nil))
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), `"code":"NAME_INVALID"`)
+}

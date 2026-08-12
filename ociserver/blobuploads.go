@@ -74,17 +74,30 @@ func (s *Server) blobUploadPost() http.HandlerFunc {
 		mount := r.URL.Query().Get("mount")
 		from := r.URL.Query().Get("from")
 
-		if mount != "" && from != "" {
-			if !ociref.IsValidRepository(from) {
-				returnError(w, ErrBlobUploadInvalid("invalid from parameter"))
+		var mountDigest, dgst ocidigest.Digest
+		var err error
+		if mount != "" {
+			mountDigest, err = ocidigest.Parse(mount)
+			if err != nil {
+				returnError(w, ErrBlobUploadInvalid("invalid mount digest"))
 				return
 			}
-			dgst, err := ocidigest.Parse(mount)
+		}
+		if dgstString != "" {
+			dgst, err = ocidigest.Parse(dgstString)
 			if err != nil {
 				returnError(w, ErrBlobUploadInvalid("invalid digest"))
 				return
 			}
-			blob, err := s.db.MountBlob(r.Context(), from, name, dgst)
+		}
+
+		if mountDigest != "" && from != "" {
+			if !ociref.IsValidRepository(from) {
+				returnError(w, ErrBlobUploadInvalid("invalid from parameter"))
+				return
+			}
+
+			blob, err := s.db.MountBlob(r.Context(), from, name, mountDigest)
 			if err != nil {
 				goto FALLBACK
 			}
@@ -94,12 +107,7 @@ func (s *Server) blobUploadPost() http.HandlerFunc {
 			w.Header().Set("Docker-Content-Digest", blob.Digest.String())
 			w.WriteHeader(http.StatusCreated)
 			return
-		} else if dgstString != "" {
-			dgst, err := ocidigest.Parse(dgstString)
-			if err != nil {
-				returnError(w, ErrBlobUploadInvalid("invalid digest"))
-				return
-			}
+		} else if dgst != "" {
 			contentLength := r.Header.Get("Content-Length")
 			if contentLength == "" {
 				contentLength = "0"
