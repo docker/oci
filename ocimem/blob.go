@@ -134,7 +134,7 @@ func (b *Buffer) Write(data []byte) (int, error) {
 }
 
 func newUUID() string {
-	buf := make([]byte, 32)
+	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
 		panic(err)
 	}
