@@ -148,6 +148,13 @@ func descriptorFromResponse(resp *http.Response, knownDigest oci.Digest, require
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
+	if contentType == mediaTypeSchema1SignedManifest {
+		// [Client.read] always strips the signature envelope from signed
+		// schema1 manifests before returning them, so report the media
+		// type callers will actually see, even for a HEAD response that
+		// has no body to strip.
+		contentType = mediaTypeSchema1Manifest
+	}
 	size := int64(0)
 	if (require & requireSize) != 0 {
 		if resp.StatusCode == http.StatusPartialContent {
@@ -264,7 +271,8 @@ var knownManifestMediaTypes = []string{
 	oci.MediaTypeImageManifest,
 	oci.MediaTypeImageIndex,
 	"application/vnd.oci.artifact.manifest.v1+json", // deprecated.
-	"application/vnd.docker.distribution.manifest.v1+json",
+	mediaTypeSchema1Manifest,
+	mediaTypeSchema1SignedManifest,
 	oci.MediaTypeDockerManifest,
 	oci.MediaTypeDockerManifestList,
 	// Technically this wildcard should be sufficient, but it isn't
