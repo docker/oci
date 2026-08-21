@@ -133,6 +133,31 @@ func (c *Client) read(req *http.Request, knownDigest oci.Digest, isManifest bool
 	if err != nil {
 		return nil, fmt.Errorf("invalid descriptor in response: %v", err)
 	}
+	if resp.Header.Get("Content-Type") == mediaTypeSchema1SignedManifest {
+		// Legacy signed Docker schema1 manifest: strip the libtrust
+		// signature envelope here, once, so that the verification
+		// below (and every caller of this method) only ever sees a
+		// plain schema1 manifest whose bytes hash to desc.Digest,
+		// exactly like any other media type. See schema1Unsign.
+		if desc.Size > maxManifestSize {
+			return nil, fmt.Errorf("manifest size %d exceeds maximum size %d", desc.Size, maxManifestSize)
+		}
+		signed, err := io.ReadAll(io.LimitReader(resp.Body, maxManifestSize+1))
+		if err != nil {
+			return nil, fmt.Errorf("failed to read signed schema1 manifest: %v", err)
+		}
+		resp.Body.Close()
+		if int64(len(signed)) != desc.Size {
+			return nil, fmt.Errorf("signed schema1 manifest size mismatch")
+		}
+		unsigned, err := schema1Unsign(signed)
+		if err != nil {
+			return nil, fmt.Errorf("cannot unsign schema1 manifest: %w", err)
+		}
+		desc.MediaType = mediaTypeSchema1Manifest
+		desc.Size = int64(len(unsigned))
+		resp.Body = io.NopCloser(bytes.NewReader(unsigned))
+	}
 	if desc.Digest == "" {
 		// Returning a digest isn't mandatory according to the spec, and
 		// at least one registry (AWS's ECR) fails to return a digest
