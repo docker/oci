@@ -26,6 +26,9 @@ type ServerConfig struct {
 
 	// AuthMiddleware, when non-nil, is applied only to the built-in OCI routes.
 	AuthMiddleware func(http.Handler) http.Handler
+
+	// TransportCompression enables gzip and flate compression for GET responses
+	TransportCompression bool
 }
 
 // Server contains everything necessary to run the API portion of the service
@@ -96,7 +99,6 @@ func (s *Server) addRoutes() {
 	if len(s.cfg.Middlewares) > 0 {
 		r.Use(s.cfg.Middlewares...)
 	}
-
 	r.Route("/v2", func(r mux.Router) {
 		if s.cfg.AuthMiddleware != nil {
 			r.Use(s.cfg.AuthMiddleware)
@@ -113,13 +115,13 @@ func (s *Server) addRoutes() {
 		r.Delete("/*name/blobs/uploads/:session", s.blobUploadDelete())
 
 		// blobs
-		r.Head("/*name/blobs/:digest", s.blobHeadGet())
-		r.Get("/*name/blobs/:digest", s.blobHeadGet())
+		r.Head("/*name/blobs/:digest", s.checkTransportCompression(s.blobHeadGet()))
+		r.Get("/*name/blobs/:digest", s.checkTransportCompression(s.blobHeadGet()))
 		r.Delete("/*name/blobs/:digest", s.blobDelete())
 
 		// manifests
 		r.Head("/*name/manifests/:reference", s.manifestHeadGet())
-		r.Get("/*name/manifests/:reference", s.manifestHeadGet())
+		r.Get("/*name/manifests/:reference", s.checkTransportCompression(s.manifestHeadGet()))
 		r.Put("/*name/manifests/:reference", s.manifestPut())
 		r.Delete("/*name/manifests/:reference", s.manifestDelete())
 
@@ -172,4 +174,11 @@ type Redirecter interface {
 	// Redirect returns whether the request should redirect, the redirect URL, and
 	// any error encountered while deciding.
 	Redirect(r *http.Request, desc oci.Descriptor, repo string) (bool, string, error)
+}
+
+func (s *Server) checkTransportCompression(next http.HandlerFunc) http.HandlerFunc {
+	if s.cfg.TransportCompression {
+		return compressHandler(next)
+	}
+	return next
 }

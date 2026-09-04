@@ -2,11 +2,14 @@ package ociserver
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -145,6 +148,33 @@ func TestServerInvalidRepositoryNameReturnsOCIError(t *testing.T) {
 			"message": "repository name is invalid: INVALID"
 		}]
 	}`, rec.Body.String())
+}
+
+func TestGzipResponseWriterRemovesUncompressedContentLength(t *testing.T) {
+	body := []byte(`{"schemaVersion":2}`)
+	handler := compressHandler(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+		_, err := w.Write(body)
+		require.NoError(t, err)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v2/example/manifests/latest", nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	res := rec.Result()
+	defer res.Body.Close()
+	require.Empty(t, res.Header.Get("Content-Length"))
+	require.Equal(t, "gzip", res.Header.Get("Content-Encoding"))
+	require.Contains(t, res.Header.Values("Vary"), "Accept-Encoding")
+
+	gz, err := gzip.NewReader(res.Body)
+	require.NoError(t, err)
+	defer gz.Close()
+	got, err := io.ReadAll(gz)
+	require.NoError(t, err)
+	require.Equal(t, body, got)
 }
 
 func TestServerRejectsOverlongRepositoryName(t *testing.T) {
