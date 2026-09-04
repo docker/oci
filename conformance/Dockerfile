@@ -1,6 +1,7 @@
 FROM golang:1.25-alpine AS build
 
-ARG DISTRIBUTION_SPEC_REF=967efdc079b91785ad18c77cc4f8991a47feefbf
+# PR https://github.com/opencontainers/distribution-spec/pull/624
+ARG DISTRIBUTION_SPEC_REF=316054f54c0192c4b3876b587d61f4bb931e7b0a
 
 RUN apk add --no-cache ca-certificates git
 RUN mkdir /src \
